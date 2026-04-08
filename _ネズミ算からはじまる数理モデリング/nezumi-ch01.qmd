@@ -1,0 +1,164 @@
+---
+title: "nezumi-ch01"
+format: html
+---
+
+## ネズミ算の基本
+- 1月にねずみのつがいが現れ、子どもを12匹うむ（初期値）
+- 生まれた子どもの性比は1:1
+- 成熟期間を1か月とし、翌月には繁殖力を有する（1組のつがいで12匹の子どもをうむ）
+- 1年間、ネズミの死亡はないとする
+- 子どもを産めるつがいの数をcとする
+- この時の翌年の1月のネズミの数は？
+
+
+```{r}
+c <- rep(0, 13)
+c[1] <- 1
+for (i in 2:13) {
+  c[i] <- 7^(i-1) * c[1]
+}
+scales::comma(c[13] * 2)
+```
+と、1年後276億匹のネズミいる計算になる
+
+
+## 未成熟期間の導入
+上の例に対して、成熟期間を1か月から2か月とする
+この場合どうなるか
+
+```{r}
+c <- rep(0, 13)
+c[1] <- 1
+c[2] <- 1
+for (i in 3:13) {
+  c[i] <- c[i - 2] * 6 + c[i - 1]
+}
+scales::comma(c[13] * 2 + c[12] * 12)
+```
+と、190万匹になる計算で大きく下がる
+
+さらに成熟期間を3か月にすると
+
+```{r}
+c <- rep(0, 13)
+c[1] <- 1
+c[2] <- 1
+c[3] <- 1
+for (i in 4:13) {
+  c[i] <- c[i - 3] * 6 + c[i - 1]
+}
+scales::comma(c[13] * 2 + c[12] * 12 + c[11] * 12) 
+```
+と、6.6万匹になる
+
+276億 > 190万匹 > 6.6万匹 成熟期間を変えると大きく繁殖数が変わるため、この成熟期間は
+重要な因子である
+
+この簡単な漸化式に対して、寿命の導入や、性差などを加えていく
+
+## 寿命の導入
+- xn: n月に初産を行うつがいの数
+- yn: n月に2回目の子をうむつがいの数
+- rn: n月に生まれる子供の合計の数
+
+```{r}
+xn <- rep(0, 12)
+yn <- rep(0, 12)
+rn <- rep(0, 12)
+an <- rep(0, 12)
+xn[1] <- 1
+yn[1] <- 0
+rn[1] <- 12
+an[1] <- 14
+
+for (i in 2:12) {
+  xn[i] <- 6 * (xn[i-1] + yn[i-1])
+  yn[i] <- xn[i-1]
+  rn[i] <- 12 * (xn[i] + yn[i])
+  an[i] <- 2 * xn[i] + rn[i]
+}
+
+xn
+yn
+rn
+an
+```
+
+## 生存確率の導入
+- 繁殖期に成熟個体あたりm個体の子を産む
+- うまれた子供は次の繁殖期までに成熟
+- 繁殖期における成熟つがいは、次の繁殖期までに死亡する
+- 非繁殖期における生存確率: sigma
+- 成熟つがいの数: cn
+- 次の繁殖期までに生き残るつがいの数は: cn * sigma
+- 次の繁殖期までに生き残る個体数: m * cn * sigma
+
+```{r}
+cn <- rep(0, 12)
+sigma_a <- 0.7
+sigma_j <- 0.3
+m <- 12
+
+cn[1] <- 1
+for (i in 2:12) {
+  
+  cn[i] <- (sigma_a + sigma_j * m / 2 ) * cn[i - 1]
+  
+}
+
+cn
+```
+## 性差の導入
+
+```{r}
+
+i_step <- 45
+cn <- rep(0, i_step)
+fn <- rep(0, i_step)
+mn <- rep(0, i_step)
+
+cn[1] <- fn[1] <- mn[1] <- 1
+
+sigma_f <- 0.6
+sigma_m <- 0.3
+sigma_j <- 0.25
+w <- 0.5
+m <- 5
+for (i in 2:i_step) {
+  fn[i] <- sigma_f * fn[i-1] + sigma_j * w * m * min(fn[i-1], mn[i-1])
+  mn[i] <- sigma_m * mn[i-1] + sigma_j * (1 - w) * m * min(fn[i-1], mn[i-1])
+  
+  cn[i] <- min(fn[i], mn[i])
+}
+
+plot(1:i_step, mn, col = "steelblue", type = "b", ylim = c(0, max(fn, mn)))
+lines(1:i_step, fn, col = "tomato", type = "b")
+
+plot(1:i_step, mn / (mn + fn), col = "steelblue", type = "l", ylim = c(0, max(fn / (mn + fn), mn / (mn + fn))))
+lines(1:i_step, fn / (mn + fn), col = "tomato", type = "l")
+abline(h = sigma_j * m / (sigma_j * m + sigma_m - sigma_f) * w, col = "green")
+```
+```{r}
+sigma_f <- 0.6
+sigma_m <- 0.3
+sigma_j <- 0.25
+w <- 0.4
+m <- 5
+for (i in 2:i_step) {
+  fn[i] <- sigma_f * fn[i-1] + sigma_j * w * m * min(fn[i-1], mn[i-1])
+  mn[i] <- sigma_m * mn[i-1] + sigma_j * (1 - w) * m * min(fn[i-1], mn[i-1])
+  
+  cn[i] <- min(fn[i], mn[i])
+}
+
+plot(1:i_step, mn, col = "steelblue", type = "b", ylim = c(0, max(fn, mn)))
+lines(1:i_step, fn, col = "tomato", type = "b")
+
+
+plot(1:i_step, mn / (mn + fn), col = "steelblue", type = "l", ylim = c(0.4, max(fn / (mn + fn), mn / (mn + fn))))
+lines(1:i_step, fn / (mn + fn), col = "tomato", type = "l")
+
+
+```
+

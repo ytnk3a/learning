@@ -1,0 +1,95 @@
+---
+title: "virus-ch07"
+format: html
+---
+
+```{r}
+
+```
+
+
+
+```{r}
+
+dt <- 0.001
+
+T0 <- 16.9e+2
+I0 <- 2.33e+2
+r0 <- 2.94e+6
+V_theta0 <-  29.1e-2
+V0 <-  0.32e-7
+
+g <- 0.67
+beta_theta <- 1.26e-4
+K_growth <- 4.12e+4
+k <- 3.75
+mu <- 2.54
+rho <- 2.36e-2
+r <- 1.52
+c <- 7.55e-2 + 1.18
+f_theta <- 1.19e-3
+
+T_max <- 4
+age_initial <- 2
+
+num_a <- floor(T_max + age_initial)/ dt
+i_end <- floor(T_max / dt)
+T_old <- T0
+I_old <- I0
+r_old <- rep(0, num_a)
+r_old[1] <- r0
+V_theta_old <- V_theta0
+V_old <- V0
+
+
+dt_seq <- T_save <- I_save <- V_theta_save <- V_save <- r_sum_save <- rep(0, i_end)
+r_save <- matrix(0, nrow = i_end, ncol = num_a)
+
+ 
+for (i in 1:i_end) {
+  
+  r_new <- r_old
+  
+  # Euler
+  T_new <- T_old + (g * T_old * (1 - (T_old + I_old) / K_growth) - beta_theta * T_old * V_theta_old) * dt
+  I_new <- I_old + (g * I_old * (1 - (T_old + I_old) / K_growth) + beta_theta * T_old * V_theta_old) * dt
+  r_new <- r_old + ((k - mu - rho) * r_old) * dt
+  V_theta_new <- V_theta_old + (f_theta * rho * sum(r_old) - r * V_theta_old - c * V_theta_old) * dt
+  V_new <- V_old + (rho * sum(r_old) - c * V_old) * dt
+  
+  r_new[2:num_a] <- r_new[1:(num_a - 1)]
+  r_new[1] <- 0.0
+  r_new[floor(2 / dt) + 1] <- r_new[floor(2 / dt) + 1] + (beta_theta * T_old * V_theta_old) * dt
+  
+  T_old <- T_new
+  I_old <- I_new
+  r_old <- r_new
+  V_theta_old <- V_theta_new
+  V_old <- V_new
+  
+  dt_seq[i] <- (i + 1) * dt
+  T_save[i] <- T_new
+  I_save[i] <- I_new
+  r_save[i, ] <- r_new
+  r_sum_save[i] <- sum(r_new)
+  V_theta_save[i] <- V_theta_new
+  V_save[i] <- V_new
+}
+plot(dt_seq, log10(T_save), type = "l")
+plot(dt_seq, log10(I_save), type = "l")
+plot(dt_seq, log10(V_save), type = "l")
+plot(dt_seq, log10(V_theta_save), type = "l")
+plot(dt_seq, log10(r_sum_save), type = "l")
+```
+
+
+```{r}
+
+# for i in range(int(Tmax//dt) + 1):
+#     test.append(np.sum(r_list[i]))
+#     
+# plt.plot(np.array(time_list), np.log10(np.array(test)))
+# plt.title("A")
+# plt.show()
+```
+

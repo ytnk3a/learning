@@ -1,0 +1,27 @@
+---
+title: test
+author: ytanaka
+---
+
+# Hello
+
+- Greeting title $x_s$
+
+$ x=1 $
+
+```julia{cmd=true}
+A = [1 2 3; 4 5 6; 7 8 9]
+println(A)
+```
+
+```julia; term=true
+A = [1 2 3; 4 5 6; 7 8 9]
+println(A)
+```
+
+```julia{cmd=true}
+using Plots
+A = [1 2 3 4 5 6 7 8 9]
+plot(sin)
+```
+

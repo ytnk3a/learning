@@ -1,0 +1,220 @@
+---
+title: "Rによるデータサイエンス"
+output: html_document
+date: "2023-05-03"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1．データマイニングとR言語
+
+## Rにもともと入っているパッケージ（知らなかったもの）
+
+- boot
+- class
+- cluster
+- compiler
+- coodetools
+- kernSmooth
+- mgcv
+- nlme
+- nnet
+- rcompgen
+- spatial
+- splines
+- stats4
+- survival
+- tcltk
+- tools
+
+```{r}
+library(tcltk)
+paste(as.character(tkchooseDirectory(title = "フォルダを選択"), sep = "", collapse =""))
+ 
+```
+
+# 2．データの入出力と編集
+- scanによる読み込み
+
+```{r}
+tmp_file <- tempfile(fileext = ".data")
+cat("TITLE extra line", "2 3 5 7", "11 13 17", file = tmp_file, sep = "\n")
+
+pp <- scan(tmp_file, skip = 1, quiet = TRUE)
+
+pp
+```
+
+- sinkによる出力
+コンソールに変えされる内容をファイルに送る関数
+> rmarkdown上では出力されないため、コンソールで使う必要がある
+
+```{r}
+
+tmp_file <- tempfile(fileext = ".txt")
+
+sink(tmp_file)
+head(iris)
+sink()
+
+fs::file_show(path = tmp_file)
+
+```
+
+
+
+# 3．データの演算と固有値，基本統計量
+
+- 論理演算
+&& || は ベクトルの最初の要素が成り立つとそれ以降の演算は行わない
+
+& | はすべての計算を行う
+
+
+```{r}
+Lx <- c(T, T, F, F)
+Ly <- c(T, F, F, T)
+```
+
+
+```{r}
+Lx & Ly
+```
+```{r}
+Lx && Ly
+```
+## 行列の積
+```{r}
+A <- matrix(c(1,2,1,4), 2,2)
+D <- matrix(c(4,2,3,4,2,1), nrow = 2, ncol = 3)
+
+A
+D
+```
+
+### 要素積
+```{r}
+# A * D
+A <- matrix(c(1,2,1,4), 2,2)
+B <- matrix(c(1,2,1,4), 2,2)
+A * B
+```
+
+### 行列積
+
+```{r}
+A <- matrix(c(1,2,1,4), 2,2)
+D <- matrix(c(4,2,3,4,2,1), nrow = 2, ncol = 3)
+
+A %*% D
+```
+
+### 行列クロス積
+
+```{r}
+A <- matrix(c(1,2,1,4), 2,2)
+D <- matrix(c(4,2,3,4,2,1), nrow = 2, ncol = 3)
+
+crossprod(A, D)
+```
+
+
+
+
+### 行列外積
+
+`a %o% b` = `outer(a, b, FUN = "*")`
+
+```{r}
+A %o% D
+```
+```{r}
+outer(A, D)
+```
+```{r}
+x <- 1:9
+
+x %o% x
+```
+
+
+```{r}
+outer(month.abb, 2020:2023, FUN = "paste")
+```
+
+### クロネッカー積
+`a %x% b` = `kronecker(a, b, FUN = "*")`
+```{r}
+A
+D
+A %x% D
+```
+
+```{r}
+fred <- matrix(1:12, 3, 4, dimnames = list(LETTERS[1:3], LETTERS[4:7]))
+fred
+bill <- c(happy = 100, sad = 1000)
+bill
+kronecker(fred, bill, make.dimnames = TRUE)
+```
+
+
+
+
+
+- 対角行列と逆行列
+
+```{r}
+diag(c(1, 2, 3))
+```
+
+```{r}
+A <- matrix(c(1, 2, 1, 4), 2, 2)
+
+A
+
+solve(A)
+
+A %*% solve(A)
+```
+
+- 固有値
+
+```{r}
+eigen(A)
+```
+
+- 特異値分解
+
+```{r}
+svd(A)
+```
+
+```{r}
+
+hilbert <- function(n) { 
+  i <- 1:n
+  1 / outer(i - 1, i, `+`) 
+  }
+
+X <- hilbert(9)[, 1:6]
+
+X
+
+(s <- svd(X))
+D <- diag(s$d)
+D
+```
+```{r}
+s$u %*% D %*% t(s$v) #  X = U D V'
+```
+
+```{r}
+t(s$u) %*% X %*% s$v #  D = U' X V
+```
+
+# 4．データの視覚化
+
+

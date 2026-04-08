@@ -1,0 +1,212 @@
+---
+title: "about RDD"
+output: html_document
+date: "2024-12-29"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(haven)
+mlda <- read_dta("AEJfigs.dta")
+
+summary(mlda)
+```
+
+```{r}
+mlda <- mlda %>% 
+  mutate(
+    age = agecell - 21, # 21歳を中心に中心化
+    is_over = as.integer(agecell > 21), # 21歳以上を表すダミー変数
+    age_sq = age^2 # age ２乗
+  )
+
+myd <- mlda %>% 
+  filter(complete.cases(all))
+```
+
+今回は
+すべての死因による死者数~all~ に対して、
+処置変数： 飲酒が認められている21才以上のダミー変数 is_over
+割り当て変数：年齢 21才を基準に中心化したage
+
+を用いる
+
+割当変数Rを中心化して使えば、どの関数形においてもρの推定値が処置効果の推定値となる。
+```{r}
+
+models1 <- alist(
+  model1 = all ~ is_over + age,
+  model2 = all ~ is_over * age,
+  model3 = all ~ is_over + age + age_sq,
+  model4 = all ~ is_over * age + is_over * age_sq
+) %>% 
+  enframe(name = "model_name", value = "formula")
+
+models1
+```
+
+```{r}
+rdd1 <- models1 %>% 
+  mutate(model = map(.x = formula, .f = lm, data = myd)) %>% 
+  mutate(
+    pred   = map(.x = model, .f = predict),
+    result = map(.x = model, .f = tidy)
+  )
+
+```
+
+```{r}
+myd
+```
+
+```{r}
+ggplot(
+  data = myd,
+  aes(x = agecell, y = all)
+  ) +
+  geom_point()
+```
+```{r}
+```
+
+
+```{r}
+rdd1$result[[1]]
+
+p1_rdd1 <- myd %>% 
+  mutate(pred = rdd1$pred[[1]]) %>% 
+  ggplot(aes(x = agecell, color = as.factor(is_over))) +
+  geom_point(aes(y = all)) +
+  geom_line(aes(y = pred)) +
+  geom_vline(xintercept = 21, color = "gray") +
+  ylim(80, 115) +
+  labs(x = "年齢", y = "10万人あたりの死者数（すべての死因）") +
+  theme(legend.position = "none")
+plot(p1_rdd1)
+```
+
+```{r}
+rdd1$result[[2]]
+
+p2_rdd1 <- myd %>% 
+  mutate(pred = rdd1$pred[[2]]) %>% 
+  ggplot(aes(x = agecell, color = as.factor(is_over))) +
+  geom_point(aes(y = all)) +
+  geom_line(aes(y = pred)) +
+  geom_vline(xintercept = 21, color = "gray") +
+  ylim(80, 115) +
+  labs(x = "年齢", y = "10万人あたりの死者数（すべての死因）") +
+  theme(legend.position = "none")
+plot(p2_rdd1)
+```
+
+```{r}
+rdd1$result[[3]]
+
+p3_rdd1 <- myd %>% 
+  mutate(pred = rdd1$pred[[3]]) %>% 
+  ggplot(aes(x = agecell, color = as.factor(is_over))) +
+  geom_point(aes(y = all)) +
+  geom_line(aes(y = pred)) +
+  geom_vline(xintercept = 21, color = "gray") +
+  ylim(80, 115) +
+  labs(x = "年齢", y = "10万人あたりの死者数（すべての死因）") +
+  theme(legend.position = "none")
+plot(p3_rdd1)
+```
+
+
+```{r}
+rdd1$result[[4]]
+
+p4_rdd1 <- myd %>% 
+  mutate(pred0 = rdd1$pred[[1]],
+         pred = rdd1$pred[[4]]) %>% 
+  ggplot(aes(x = agecell, color = as.factor(is_over))) +
+  geom_point(aes(y = all)) +
+  geom_line(aes(y = pred0), linetype = "dashed") +
+  geom_line(aes(y = pred)) +
+  geom_vline(xintercept = 21, color = "gray") +
+  ylim(80, 115) +
+  labs(x = "年齢", y = "10万人あたりの死者数（すべての死因）") +
+  theme(legend.position = "none")
+plot(p4_rdd1)
+```
+
+```{r}
+rdd1 %>% 
+  unnest(cols = result) %>% 
+  filter(term == "is_over") %>% 
+  select(model_name, term, estimate, std.error)
+```
+
+パラメトリックRDの推定結果は関数形に依存する。
+誤った関数形を使うと、誤った推定結果を得ることになる。
+繰り返しになるが、私たちは正しい式を知らないので、関数形の誤りの可能性は常に存在する。 したがって、経済学、経営学、心理学、政治学などの理論に基づいて妥当な関数形（回帰式）を選ぶ必要がある。
+理論的に妥当性が高い複数の関数形によって推定した結果がどれも実質的に同じなら、
+推定結果に対する信頼性が高まる。
+
+- パラメトリックRD: 
+  回帰式が特定の形であると想定し、割当変数 (running variable)が最小値から最大値までの
+  範囲全体について回帰式の予測値を計算した。
+
+- ノンパラメトリックRD: 
+  回帰式の関数形を考えない。 Rの分布範囲全体の予測をする代わりに、
+  は推定の対象となる範囲をカットオフ値の周辺に限定し、処置群と統制群の平均値を比較する
+
+```{r}
+bw <- seq(from = 0.5, to = 1.5, by = 0.25)
+dfs <- lapply(1:5, function(i) myd %>% filter(age > -bw[i], age < bw[i])) 
+```
+
+```{r}
+rdd_np <- lapply(dfs, function(x) lm(all ~ is_over + age, data = x))
+
+tibble(bandwidth = bw) %>% 
+  mutate(result = map(.x = rdd_np, .f = tidy)) %>% 
+  unnest(cols = "result") %>% 
+  filter(term == "is_over") %>% 
+  select(bandwidth:std.error)
+
+```
+
+```{r}
+myd_sub <- myd %>% 
+  filter(agecell > 20, agecell < 22)
+
+models2 <- alist(
+  model1 = all ~ is_over + age,
+  model4 = all ~ is_over * age + is_over * age_sq
+  ) %>% 
+  enframe(name = "model_name", value = "formula")
+
+rdd2 <- models2 %>% 
+  mutate(model = map(.x = formula, .f = lm, data = myd_sub)) %>% 
+  mutate(pred = map(.x = model, .f = predict),
+         result = map(.x = model, .f = tidy))
+
+rdd2 %>% 
+  unnest(cols = result) %>% 
+  filter(term == "is_over") %>%
+  select(model_name, estimate, std.error) 
+```
+
+パラメトリックRDの場合には、モデル1とモデル4の結果は大きく異なっていた。
+しかし、分析対象をカットオフ値付近に限定することで、関数形の違いによる推定値の差がほとんどなくなった。
+このように、バンド幅を狭くすると、推定値が回帰式の関数形に（あまり）依存しなくなる。
+（非常に大雑把に言えば）これが「ノンパラメトリック」と呼ばれる理由
+
+```{r}
+rdd_np2 <- RDestimate(all ~ agecell, cutpoint = 21, data = myd)
+summary(rdd_np2)
+```
+
+```{r}
+plot(rdd_np2)
+```
+
+関数形がわからないときは、「境界線付近」以外のサンプルを使うことは諦めて、ノンパラメトリックRDでバイアスの小さな推定値を得ることを目指すほうが良い

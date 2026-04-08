@@ -1,0 +1,396 @@
+---
+title: "ode-with-stan-ref-ch5"
+format: html
+editor: 
+  markdown: 
+    wrap: 72
+---
+
+```{r}
+library(deSolve)
+library(cmdstanr)
+library(tidyverse)
+library(outbreaks)
+```
+
+Stanを使って、常微分方程式を解くまでの道のりを整理しておく
+
+[Ordinary Differential Equations](https://mc-stan.org/docs/stan-users-guide/odes.html)
+このページが公式で、サンプルは簡単 harmonic oscillatorを例としている。
+（物理では見るが、マーケティングではあまり見ない例なのでこれをサンプルとして挙げられるとややつらい）
+
+
+## SIRモデルの例：SIRモデルのベイズ推定
+
+$$
+\begin{align}
+\frac{dS(t)}{dt} &= -\beta S(t) I(t) \\
+\frac{dI(t)}{dt} &= \beta S(t) I(t) - \gamma I(t) \\
+\frac{dR(t)}{dt} &= \gamma I(t)
+\end{align}
+$$
+
+参考文献） [SIRモデルのベイズ推定 #統計学 - Qiita](https://qiita.com/s-yonekura/items/51d5128f9ff525094ac6)
+2.より常微分方程式は一般的に 
+
+$$
+\frac{dy(t)}{dt} = f(y(t))
+$$
+
+
+のように、表される。SIRモデルの場合は $y(t)=(S(t), I(t), R(t))$ となる。
+stanでは
+
+```stan
+real[] f(real time, real[] state, real[] theta, real[] x_r, int[] x_i)
+```
+
+と一般的に常微分方程式の中身を指定する。この各引数は - time: 時間 -
+state: yの構成要素 - theta: fを計算するときのパラメーター - x_r:
+fを評価する実数値 - x_i: fを評価する整数値
+
+となる
+
+```{r}
+cases = influenza_england_1978_school$in_bed  # 静養中の学生の数(感染者数の観測値)
+
+# 学生の数（人口）
+N = 763;
+
+# 時間
+n_days = length(cases) #全期間
+t = seq(0, n_days, by = 1)　#タイムステップ
+t0 = 0 
+t = t[-1]
+
+#初期値の設定
+i0 = 1　#初期に一人感染者が人口内に出現
+s0 = N - i0 
+r0 = 0
+y0 = c(S = s0, I = i0, R = r0)
+
+#Stanにデータを渡す 
+data_sir = list(n_days = n_days, y0 = y0, t0 = t0, ts = t, N = N, cases = cases)
+```
+```{r}
+model <- cmdstan_model("sir-model.stan")
+
+options(mc.cores = parallel::detectCores())
+n_warmup <- 1 # 100~500
+n_sample <- 9
+
+fit <- model$sample(    # Stan本のパラメータ推奨範囲
+  data = data_sir,
+  seed = 1,
+  chains = 3,
+  parallel_chains = 3,
+  iter_warmup     = n_warmup,
+  iter_sampling   = n_sample, # 1000~3000
+  refresh         = 250   # 500
+  )
+
+fit$summary()
+
+fit$summary(variables = c(
+  "beta", "gamma"),
+  mean
+  )
+
+```
+```{r}
+df <- fit$summary(variables = c("y"), mean)
+
+df <- df %>% 
+  mutate(sir = case_when(
+    str_detect(variable, ",1]") ~ "S",
+    str_detect(variable, ",2]") ~ "I",
+    str_detect(variable, ",3]") ~ "R"
+  )) %>% 
+  group_by(sir) %>% 
+  mutate(rid = row_number())
+
+df %>%
+  ggplot(aes(x = rid, y = mean, group = sir, color = sir)) +
+  geom_line() +
+  geom_point()
+```
+## dydt = -kyの例
+```{r}
+fun_eq <- function(t, state, parameters){
+  with(as.list(c(state, parameters)), {
+    # pars: k 
+    # state: y 
+    dy <- k * y
+    list(c(dy))
+  })
+}
+
+t_len   <- seq(0, 5, by=0.1)
+
+parameters <- c(k = 1)
+initial_state <- c(y = 0.1)
+out <- ode(y = initial_state, times = t_len, func = fun_eq, parms = parameters)
+plot(out, ylim = c(0, 1))
+
+parameters <- c(k = -2)
+initial_state <- c(y = 0.1)
+out <- ode(y = initial_state, times = t_len, func = fun_eq, parms = parameters)
+lines(out, col = "red")
+
+legend(
+  "topleft",
+  legend = c("k = 1", "k=-1"),
+  lty = "solid",
+  col = c("black", "red")
+)
+```
+で求められる成長曲線をもとに$k$をstanで推定してみる
+まずは、データを作る
+```{r}
+parameters <- c(k = 2.5)
+initial_state <- c(y = 2)
+out <- ode(y = initial_state, times = t_len, func = fun_eq, parms = parameters)
+plot(out, ylim = c(0, 10000))
+
+set.seed(6)
+sample_n <- 15
+idx <- sort(sample(1:length(t_len), sample_n))
+points(out[idx, 1], out[idx, 2])
+
+data <- out[idx, ] %>% 
+  as_tibble() %>% 
+  mutate(
+    obs = y + rnorm(n(), 0 , 0.5)
+  )
+
+points(data$time, data$obs, col = "red")
+
+data
+```
+
+```{r}
+
+stan_data = list(
+  n = nrow(data),
+  # y0_val = 0.1,
+  t0 = 0,
+  ts = data$time,
+  obs = data$obs
+  )
+
+model <- cmdstan_model("dydt-ky-model.stan")
+
+options(mc.cores = parallel::detectCores())
+n_warmup <- 1000 # 100~500
+n_sample <- 9000
+
+fit <- model$sample(    # Stan本のパラメータ推奨範囲
+  data = stan_data,
+  seed = 1,
+  chains = 3,
+  parallel_chains = 3,
+  iter_warmup     = n_warmup,
+  iter_sampling   = n_sample, # 1000~3000
+  refresh         = 500,   # 500
+  init = list(
+    list(k = 2.5, y0 = 0.1),
+    list(k = 2.5, y0 = 0.1),
+    list(k = 2.5, y0 = 0.1)
+    )
+  )
+
+fit$summary()
+fit$summary(variables = c("k", "y0"), mean)
+
+df <- fit$summary(variables = c("y_hat"), mean)
+
+df
+plot(out, ylim = c(0, 10000))
+points(data$time, data$obs, col = "red")
+points(data$time, df$mean)
+
+library(bayesplot)
+mcmc_draw_par <- fit$draws(c("k", "y0"))
+
+# trace plot
+mcmc_trace(mcmc_draw_par, n_warmup = n_warmup, 
+           facet_args = list(nrow = 3, labeller = label_parsed))
+mcmc_dens(mcmc_draw_par)
+```
+
+
+## Stan User Guide: Ordinary Differential Equations
+
+
+$$ 
+\begin{align}
+\frac{d y_1}{dt} &= y_2 \\
+\frac{d y_2}{dt} &= -y_1 - \theta y_2
+\end{align}
+$$ 
+
+
+```{r}
+
+```
+
+## [Ordinary Differential Equations with Stan in R \| Mikhail Popov](https://mpopov.com/tutorials/ode-stan-r/) を参考に
+
+## ウィルス Ch.05
+
+$$
+\begin{align}
+\frac{d T \left( t \right)}{dt} &= L(t) - \beta T(t) V(t) \\
+\frac{d I \left( t \right)}{dt} &= \beta T(t) V(t) - \delta I(t) \\
+\frac{d V \left( t \right)}{dt} &= p I(t) - c V(t)
+\end{align}
+$$
+
+
+```{r}
+## 擬似データ生成
+
+## 計算する時刻の設定
+Tmin <- 0.0
+Tmax <- 20.0
+step_size <- 0.001
+
+## パラメータの設定
+## lambda, d, beta, delta, p, c, T(0), I(0), V(0)
+pars <- c(0.0, 0.057, 8.61*(10.0^-11.0),
+          0.057 + 1.75, 3.26*(10.0^4.0), 1.93 + 0.039,
+          6.46*(10.0^6.0), 10.0^-1.0, 5.0*(10.0^4.0))
+
+## 傾き（微分）の定義
+ode_derives <- function(t, var, pars) {
+    with(as.list(c(var, pars)), {
+        ## var: T(t), I(t), V(t)
+        dTdt <- plambda - d * TC - beta * TC * VL
+        dIdt <- beta * TC * VL - delta * IC
+        dVdt <- p * IC - c * VL
+        
+        return(list(c(dTdt, dIdt, dVdt)))
+    })
+}
+
+## パラメータを受け取ってode関数に渡す関数
+ODEs <- function(parms) {
+    pars <- parms[1:6]
+    names(pars) <- c("plambda", "d", "beta", "delta", "p", "c")
+    
+    ## 計算のタイムステップ
+    t_list <- seq(Tmin, Tmax, by = step_size)
+    ## 初期値 I(0), V(0)
+    var_init <- c(TC = parms[7], IC = parms[8], VL = parms[9])
+    ## 微分方程式の計算
+    out <- ode(y = var_init, times = t_list, func = ode_derives, parms = pars)
+    
+    as.data.frame(out)
+}
+
+out <- ODEs(pars)
+
+set.seed(0987)
+time_sample <- (seq(2, 20, by = 2)/step_size) + 1
+
+data_sample <- out[time_sample, ]
+
+for (i in 1:3) {
+    data_sample[, i + 1] <- exp(log(data_sample[, i + 1]) + rnorm(nrow(data_sample), mean = 0, sd = 1))
+}
+
+plt <- list()
+
+for (i in 1:3) {
+    data_temp <- rbind(cbind(out, label = "True"), cbind(data_sample, label = "Generated"))[, c("time", c("TC", "IC", "VL")[i], "label")]
+    colnames(data_temp)[2] <- "y"
+    data_temp$label <- factor(data_temp$label, levels = c("True", "Generated"))
+    
+    plt[[i]] <- ggplot(data = data_temp, aes(x = time, y = log10(y), color = label, linewidth = label, size = label)) +
+        geom_line() +
+        geom_point() +
+        scale_color_manual(values = c(True = "black", Generated = "red")) +
+        scale_size_manual(values = c(True = 0, Generated = 1)) +
+        scale_linewidth_manual(values = c(True = 1, Generated = 0)) +
+        xlab("Time") +
+        ylab(c("Target cells (log10)", "Infected cells (log10)", "Viral load (log10)")[i]) +
+        theme(legend.title = element_blank())
+}
+
+options(repr.plot.width = 20, repr.plot.height = 6, repr.plot.res = 100) ## プロットの描画サイズの設定
+plt
+```
+
+```{r}
+stan_data <- list(
+  num_data_points = nrow(data_sample),
+  num_model_parameters = 5,
+  num_initial_states = 3,
+  time_start = 0,
+  time_observed = data_sample$time,
+  TC_observed = data_sample$TC,
+  IC_observed = data_sample$IC,
+  VL_observed = data_sample$VL
+  )
+
+# set initial value
+set.seed(5)
+num_chain <- 4
+init_stan <- list()
+for (i in 1:4) {
+  init_stan[[i]] <- list(beta = runif(1, min = log(1e-11), max = log(1e-10)),
+                         p = runif(1, min = log(1e+4), max = log(1e+5)),
+                         V0L = runif(1, min = log(1e+4), max = log(1e+5)),
+                         sigma = 0.1)
+}
+
+
+n_warmup <- 10
+n_sample <- 90
+model <- cmdstan_model("virus-dyna-ch05.stan")
+fit <- model$sample(    # Stan本のパラメータ推奨範囲
+  data = stan_data,
+  seed = 1,
+  chains = num_chain,
+  parallel_chains = num_chain,
+  iter_warmup     = n_warmup,
+  iter_sampling   = n_sample, # 1000~3000
+  refresh         = 500,   # 500
+  init = init_stan
+  )
+
+
+fit$summary()
+fit$summary(variables = c("beta", "p", "V0L"), mean)
+fit$summary(variables = c("beta", "p", "V0L"), mean)
+
+df <- fit$summary(variables = c("y_hat"), mean)
+
+df %>% 
+  mutate(
+    var = case_when(
+      str_detect(variable, ",1]") ~ "dTdt",
+      str_detect(variable, ",2]") ~ "dIdt",
+      str_detect(variable, ",3]") ~ "dVdt"
+    ),
+    log_mean = log10(mean)
+  ) %>%
+  group_by(var) %>% 
+  mutate(rid = row_number()) %>% 
+  ggplot(aes(x = rid, y = log_mean, group = var, color = var)) +
+  geom_line()
+# parameters {
+#    // model parameters
+#    real<lower=log(1e-11), upper=log(1e-10)> beta;
+#    real<lower=log(1e+4), upper=log(1e+5)> p;
+#    real<lower=log(1e+4), upper=log(1e+5)> V0L;
+# 
+#    // standard deviation of error model
+#    real<lower=0, upper=100> sigma;
+# }
+
+```
+
+\frac{d T \left( t \right)}{dt} &= L(t) - \beta T(t) V(t) \\
+\frac{d I \left( t \right)}{dt} &= \beta T(t) V(t) - \delta I(t) \\
+\frac{d V \left( t \right)}{dt} &= p I(t) - c V(t)

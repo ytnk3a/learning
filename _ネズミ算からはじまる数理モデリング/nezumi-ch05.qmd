@@ -1,0 +1,285 @@
+---
+title: "nezumi-ch05"
+format: html
+---
+
+```{r}
+
+i_end <- 50
+
+u <- numeric(i_end)
+wxx <- 1
+wxy <- 5/6
+wyy <- 0.9*5/6
+
+u[1] <- 0.4
+
+XX <- XY <- YY <- numeric(i_end)
+XX[1] <- wxx * u[1]^2
+XY[1] <- wxy * 2 * u[1] * (1 - u[1])
+YY[1] <- wyy * (1- u[1])^2
+for (i in 1:(i_end - 1)) {
+  
+  numerator <- (wxx - wxy) * u[i]^2 + wxy * u[i]
+  denominator <- (wxx - 2 * wxy + wyy) * u[i]^2 + 2 * (wxy - wyy) * u[i] + wyy
+  u[i + 1] <- numerator / denominator
+  
+  XX[i + 1] <- wxx * u[i + 1]^2
+  XY[i + 1] <- wxy * 2 * u[i + 1] * (1 - u[i + 1])
+  YY[i + 1] <- wyy * (1- u[i + 1])^2
+  
+}
+
+plot(u, type = "l", ylim = c(0, 1.3))
+lines(XX, col = "red")
+lines(XY, col = "blue")
+lines(YY, col = "orange")
+
+u <- numeric(i_end)
+wxx <- 1
+wxy <- 10/7
+wyy <- 0.9*wxy
+
+u[1] <- 0.4
+
+XX <- XY <- YY <- numeric(i_end)
+XX[1] <- wxx * u[1]^2
+XY[1] <- wxy * 2 * u[1] * (1 - u[1])
+YY[1] <- wyy * (1- u[1])^2
+for (i in 1:(i_end - 1)) {
+  
+  numerator <- (wxx - wxy) * u[i]^2 + wxy * u[i]
+  denominator <- (wxx - 2 * wxy + wyy) * u[i]^2 + 2 * (wxy - wyy) * u[i] + wyy
+  u[i + 1] <- numerator / denominator
+  
+  XX[i + 1] <- wxx * u[i + 1]^2
+  XY[i + 1] <- wxy * 2 * u[i + 1] * (1 - u[i + 1])
+  YY[i + 1] <- wyy * (1- u[i + 1])^2
+  
+}
+
+plot(u, type = "l", ylim = c(0, 1.3))
+lines(XX, col = "red")
+lines(XY, col = "blue")
+lines(YY, col = "orange")
+```
+## 5.2 教育意識の親子間伝達ダイナミクス & Fig.5.4
+```{r}
+
+plot_fig54 <- function(mu_A, mu_a) {
+  i_end <- 30
+  un <- numeric(i_end)
+  un[1] <- 0.5
+  # mu_A <- 0.05
+  # mu_a <- 0.2
+  phi_AA <- phi_Aa <- phi_aa <- numeric(i_end)
+  
+  phi_AA[1] <- un[1]^2
+  phi_Aa[1] <- 2 * (1 - un[1]) * un[1]
+  phi_aa[1] <- (1 - un[1])^2
+  
+  for (i in 1:i_end) {
+    un[i + 1] <- (1 - mu_A) * un[i] + mu_a * (1 - un[i])
+    phi_AA[i + 1] <- un[i+1]^2
+    phi_Aa[i + 1] <- 2 * (1 - un[i+1]) * un[i+1]
+    phi_aa[i + 1] <- (1 - un[i + 1])^2
+    
+  }
+  
+  plot(0:i_end, un, type = "b", ylim = c(0, 1))
+  lines(0:i_end, phi_AA, col = "tomato")
+  lines(0:i_end, phi_Aa, col = "steelblue")
+  lines(0:i_end, phi_aa, col = "orange")
+  
+}
+
+plot_fig54(0.05, 0.2)
+plot_fig54(0.1, 0.15)
+plot_fig54(0.2, 0.05)
+```
+
+## Fig.5.5
+```{r}
+plot_fig55 <- function(mu_A_per_mu_a) {
+  i_end <- 30
+  un <- numeric(i_end)
+  un[1] <- 0.5
+  # mu_A <- 0.05
+  # mu_a <- 0.2
+  mu_a <- 0.1
+  mu_A <- mu_A_per_mu_a * mu_a
+  phi_AA <- phi_Aa <- phi_aa <- numeric(i_end)
+  
+  phi_AA[1] <- un[1]^2
+  phi_Aa[1] <- 2 * (1 - un[1]) * un[1]
+  phi_aa[1] <- (1 - un[1])^2
+  
+  for (i in 1:i_end) {
+    un[i + 1] <- (1 - mu_A) * un[i] + mu_a * (1 - un[i])
+    phi_AA[i + 1] <- un[i+1]^2
+    phi_Aa[i + 1] <- 2 * (1 - un[i+1]) * un[i+1]
+    phi_aa[i + 1] <- (1 - un[i + 1])^2
+    
+  }
+  
+  return(data.frame(
+    pAA = phi_AA[i_end + 1],
+    pAa = phi_Aa[i_end + 1],
+    paa = phi_aa[i_end + 1]
+  ))
+  
+}
+
+mu_A_per_mu_a_seq <- seq(0.01, 3, by = 0.01)
+for (i in seq_along(mu_A_per_mu_a_seq)) {
+  
+  if (i == 1) {
+    
+    d <- plot_fig55(mu_A_per_mu_a_seq[i])
+    
+  } else {
+    d <- rbind(d, plot_fig55(mu_A_per_mu_a_seq[i]))
+  }
+  
+}
+
+plot(mu_A_per_mu_a_seq, d$pAA, type = "l", ylim = c(0, 1))
+lines(mu_A_per_mu_a_seq, d$pAa, col = "tomato")
+lines(mu_A_per_mu_a_seq, d$paa, col = "orange")
+
+
+```
+## Fig. 5.6
+```{r}
+plot_fig56 <- function(mu_A_1, mu_a_1, mu_A_2, mu_a_2) {
+  i_end <- 50
+  un <- numeric(i_end)
+  un[1] <- 0.5
+  # mu_A <- 0.05
+  # mu_a <- 0.2
+  phi_AA <- phi_Aa <- phi_aa <- numeric(i_end)
+  
+  phi_AA[1] <- un[1]^2
+  phi_Aa[1] <- 2 * (1 - un[1]) * un[1]
+  phi_aa[1] <- (1 - un[1])^2
+  
+  for (i in 1:i_end) {
+    
+    if (i < 20) {
+      mu_A <- mu_A_1
+      mu_a <- mu_a_1
+    } else {
+      mu_A <- mu_A_2
+      mu_a <- mu_a_2
+    }
+    un[i + 1] <- (1 - mu_A) * un[i] + mu_a * (1 - un[i])
+    phi_AA[i + 1] <- un[i+1]^2
+    phi_Aa[i + 1] <- 2 * (1 - un[i+1]) * un[i+1]
+    phi_aa[i + 1] <- (1 - un[i + 1])^2
+    
+  }
+  
+  plot(0:i_end, un, type = "b", ylim = c(0, 1))
+  lines(0:i_end, phi_AA, col = "tomato")
+  lines(0:i_end, phi_Aa, col = "steelblue")
+  lines(0:i_end, phi_aa, col = "orange")
+  
+}
+
+plot_fig56(0.05, 0.20, 0.15, 0.05)
+plot_fig56(0.15, 0.05, 0.05, 0.20)
+plot_fig56(0.15, 0.05, 0.60, 0.80)
+plot_fig56(0.15, 0.05, 0.90, 0.95)
+```
+
+## 5.4 伝達変異への世相の影響
+
+```{r}
+plot_sec54 <- function(mu_A, mu_a, rA, ra) {
+  i_end <- 50
+  un <- numeric(i_end)
+  un[1] <- 0.5
+  theta <- 2.0
+  # mu_A <- 0.05
+  # mu_a <- 0.2
+  phi_AA <- phi_Aa <- phi_aa <- numeric(i_end)
+  
+  phi_AA[1] <- un[1]^2
+  phi_Aa[1] <- 2 * (1 - un[1]) * un[1]
+  phi_aa[1] <- (1 - un[1])^2
+  
+  for (i in 1:i_end) {
+    
+    mu_A <- rA * (1 - un[i])^(1/theta)
+    mu_a <- ra * un[i]^(1/theta)
+    
+    un[i + 1] <- (1 - mu_A) * un[i] + mu_a * (1 - un[i])
+    phi_AA[i + 1] <- un[i+1]^2
+    phi_Aa[i + 1] <- 2 * (1 - un[i+1]) * un[i+1]
+    phi_aa[i + 1] <- (1 - un[i + 1])^2
+    
+  }
+  
+  plot(0:i_end, un, type = "b", ylim = c(0, 1))
+  lines(0:i_end, phi_AA, col = "tomato")
+  lines(0:i_end, phi_Aa, col = "steelblue")
+  lines(0:i_end, phi_aa, col = "orange")
+  
+}
+
+plot_fig54(0.05, 0.2)
+plot_sec54(0.05, 0.20, 0.15, 0.10)
+```
+
+```{r}
+
+plot_fig58 <- function(rA, ra) {
+  theta_seq <- seq(0, 3, by = 0.01)
+  u_star <- numeric(length(theta_seq))
+  # rA <- 0.15
+  # ra <- 0.10
+  for (i in seq_along(theta_seq)) {
+    
+    theta <- theta_seq[i]
+    
+    pow_theta <- theta / (theta - 1)
+    u_star[i] <- (1 + (rA/ra)^pow_theta)^(-1)
+    
+    
+  }
+  
+  plot(u_star, type = "l")
+}
+
+plot_fig58(0.15, 0.10)
+plot_fig58(0.10, 0.15)
+```
+
+```{r}
+
+theta <- 2.0
+pow_theta <- theta / (theta - 1)
+
+rA_per_ra_seq <- seq(0, 3, by = 0.01)
+
+u_star <- numeric(length(rA_per_ra_seq))
+phi_AA <- phi_Aa <- phi_aa <- numeric(length(rA_per_ra_seq))
+  
+for (i in seq_along(rA_per_ra_seq)) {
+  
+  u_star[i] <- (1 + (rA_per_ra_seq[i])^pow_theta)^(-1)
+  
+  phi_AA[i] <- u_star[i]^2
+  phi_Aa[i] <- 2 * (1 - u_star[i]) * u_star[i]
+  phi_aa[i] <- (1 - u_star[i])^2
+  
+}
+
+plot(rA_per_ra_seq, u_star, type = "l", ylim = c(0, 1), xlab = expression(gamma[A] *"/" * gamma[a]), ylab = "")
+lines(rA_per_ra_seq, phi_AA, col = "tomato")
+lines(rA_per_ra_seq, phi_Aa, col = "steelblue")
+lines(rA_per_ra_seq, phi_aa, col = "orange")
+abline(v = 1.0, col = "gray", lty = "dotted")
+abline(h = 0.5, col = "gray", lty = "dotted")
+```
+

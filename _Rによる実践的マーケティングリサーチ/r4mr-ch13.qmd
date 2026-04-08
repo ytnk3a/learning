@@ -1,0 +1,302 @@
+---
+title: "Ch.13: 選択モデル"
+format: html
+editor: source
+---
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+cbc_df <- read_csv("http://goo.gl/5xQObB") %>%
+  mutate(
+    seat = as.factor(seat),
+    price = as.factor(price),
+    choice = as.integer(choice),
+    eng = factor(eng, levels = c("gas", "hyb", "elec")),
+    carpool = factor(carpool, levels = c("yes", "no")),
+    cargo = factor( cargo, levels = c("2ft", "3ft")),
+  )
+
+cbc_df
+```
+```{r}
+attrib <- list(
+  seat = c("6", "7", "8"),
+  cargo = c("2ft", "3ft"),
+  eng = c("gas", "hyb", "elec"),
+  price = c("30", "35", "40")
+)
+
+coef_names <- NULL
+for (a in seq_along(attrib)) {
+  coef_names <- c(coef_names, paste(names(attrib)[a], attrib[[a]][-1], sep = ""))
+}
+coef_names
+```
+
+```{r}
+mu <- c(-1, -1, 0.5, -1, -2, -1, -2)
+names(mu) <- coef_names
+
+mu
+```
+```{r}
+Sigma <- diag(c(0.3, 1, 0.1, 0.3, 1, 0.2, 0.3))
+dimnames(Sigma) <- list(coef_names, coef_names)
+Sigma["enghyb", "engelec"] <- Sigma["engelec", "enghyb"] <- 0.3
+
+set.seed(123)
+resp_id <- 1:200
+
+carpool <- sample(c("yes", "no"), size = length(resp_id), replace = TRUE, prob = c(0.3, 0.7))
+
+library(MASS)
+coefs <- mvrnorm(length(resp_id), mu = mu, Sigma = Sigma)
+colnames(coefs) <- coef_names
+coefs[carpool == "yes", "seat8"] <- coefs[carpool == "yes", "seat8"] + 2
+coefs[carpool == "yes", "seat7"] <- coefs[carpool == "yes", "seat7"] + 1.5
+
+nques <- 15
+nalt <- 3
+
+profiles <- expand.grid(attrib)
+nrow(profiles)
+head(profiles)
+```
+
+```{r}
+profiles_coded <- model.matrix(~ seat + cargo + eng + price, data = profiles)[, -1]
+head(profiles_coded)
+```
+```{r}
+cbc_df <- data.frame(NULL)
+
+for (i in seq_along(resp_id)) {
+  profiles_i <- sample(1:nrow(profiles), size = nques * nalt)
+  utility <- profiles_coded[profiles_i, ] %*% coefs[i, ]
+  wide_util <- matrix(data = utility, ncol = nalt, byrow = TRUE)
+  probs <- exp(wide_util) / rowSums(exp(wide_util))
+  choice <- apply(probs, 1, function(x) sample(1:nalt, size = 1, prob = x))
+  choice <- rep(choice, each = nalt) == rep(1:nalt, nques)
+  conjoint_i <- data.frame(
+    resp_id = rep(i, nques),
+    ques = rep(1:nques, each = nalt),
+    alt = rep(1:nalt, nques),
+    carpool = rep(carpool[i], nques),
+    profiles[profiles_i, ],
+    choice = as.numeric(choice)
+  )
+  
+  cbc_df <- rbind(cbc_df, conjoint_i)
+}
+
+cbc_df
+```
+
+```{r}
+library(mlogit)
+cbc_mlogit <- mlogit.data(data = as.data.frame(cbc_df), choice = "choice", shape = "long", varying = 3:6, alt.levels = paste("pos", 1:3), id.var = "resp.id")
+```
+
+```{r}
+cbc_df
+TravelMode
+```
+
+```{r}
+mlogit.data(data = as.data.frame(cbc_df), choice = "choice", shape = "long", varying = 3:6, alt.levels = paste0("pos", 1:3), id.var = "resp_id")
+mlogit.data(data = as.data.frame(cbc_df), choice = "choice", shape = "long", alt.levels = paste("pos", 1:3), id.var = "resp.id")
+TravelMode
+mlogit.data(TravelMode,                   choice = "choice", shape = "long", id.var = "individual", alt.levels = c("air", "train", "bus", "car"))
+```
+```{r}
+
+cbc_df %>%
+  filter(ques == 1, alt == 1)
+  count(ques, alt) %>%
+  filter(n > 1)
+
+cbc_mlogit <- mlogit.data(data = as.data.frame(cbc_df),
+                          choice = "choice",
+                          shape = "long",
+                          id.var = "resp.id",
+                          chid.var = "ques",  # 質問ごとの選択セット
+                          # varying = 4:8,
+                          alt.var = "alt",
+                          alt.levels = paste("pos", 1:3)
+                          ) # 回答者ID
+```
+
+
+```{r}
+mlogit(choice ~ 0 + seat + cargo + eng + price, data = cbc_df)
+```
+
+
+```{r}
+data(Fishing)
+Fishing
+Fish <- mlogit.data(Fishing, varying = c(2:9), shape = "wide", choice ="mode")
+Fish
+```
+
+
+
+```{r}
+library(AER)
+data(TravelMode)
+head(TravelMode)
+
+TM <- mlogit.data(TravelMode, choice = "choice", shape = "long", id.var = "individual", alt.levels = c("air", "train", "bus", "car"))
+
+FitTM <- mlogit(choice ~ 0 + vcost | income | travel, data=TM)
+
+summary(FitTM)
+fitRes <- FitTM$probabilities
+head(fitRes)
+```
+
+```{r}
+attrib <- list(seat  = c("6", "7", "8"),
+               cargo = c("2ft", "3ft"),
+               eng   = c("gas", "hyb", "elec"), 
+               price = c("30", "35", "40"))
+coef.names <- NULL
+for (a in seq_along(attrib)) {
+  coef.names <- c(coef.names, 
+                  paste(names(attrib)[a], 
+                        attrib[[a]][-1], sep=""))
+}
+coef.names
+mu <- c(-1, -1, 0.5, -1, -2, -1, -2)
+names(mu) <- coef.names
+mu
+Sigma <- diag(c(0.3, 1, 0.1, 0.3, 1, 0.2, 0.3))
+dimnames(Sigma) <- list(coef.names, coef.names)
+Sigma["enghyb", "engelec"] <- Sigma["engelec", "enghyb"] <- 0.3
+
+set.seed(33040)
+resp.id <- 1:200 # respondent ids
+carpool <- sample(c("yes", "no"), size=length(resp.id), replace=TRUE, 
+                  prob=c(0.3, 0.7))
+library(MASS)
+coefs <- mvrnorm(length(resp.id), mu=mu, Sigma=Sigma)
+colnames(coefs) <- coef.names
+coefs[carpool=="yes", "seat8"] <- coefs[carpool=="yes", "seat8"] + 2
+coefs[carpool=="yes", "seat7"] <- coefs[carpool=="yes", "seat7"] + 1.5
+# Try it!: head(cbind(carpool, coefs))
+# Try it!: by(coefs, carpool, colMeans)
+nques <- 15
+nalt <- 3
+
+profiles <- expand.grid(attrib)
+nrow(profiles)
+head(profiles)
+profiles.coded <- model.matrix(~ seat + cargo + eng + price, data=profiles)[ , -1]
+head(profiles.coded)
+
+cbc.df <- data.frame(NULL)
+for (i in seq_along(resp.id)) {
+  profiles.i <- sample(1:nrow(profiles), size=nques*nalt)
+  utility <- profiles.coded[profiles.i, ] %*% coefs[i, ] 
+  wide.util <- matrix(data=utility, ncol=nalt, byrow=TRUE)
+  probs <- exp(wide.util) / rowSums(exp(wide.util))
+  choice <- apply(probs, 1, function(x) sample(1:nalt, size=1, prob=x))
+  choice <- rep(choice, each=nalt)==rep(1:nalt, nques)
+  conjoint.i <- data.frame(resp.id=rep(i, nques), 
+                           ques = rep(1:nques, each=nalt), 
+                           alt = rep(1:nalt, nques), 
+                           carpool = rep(carpool[i], nques), 
+                           profiles[profiles.i, ], 
+                           choice = as.numeric(choice))
+  cbc.df <- rbind(cbc.df, conjoint.i)
+}  
+
+
+```
+
+```{r}
+if (packageVersion("mlogit") < "1.1") {
+  # for mlogit up through 1.0.3
+  # matches book 1st and 2nd edition, but fails with recent mlogit versions
+  cbc.mlogit <- mlogit.data(data=cbc.df, choice="choice", shape="long", 
+                            varying=3:6, alt.levels=paste("pos", 1:3), 
+                            id.var="resp.id")
+} else {
+  # for mlogit starting with version 1.1
+  library(dfidx)      # install if needed
+  
+  # add a column with unique question numbers, as needed in mlogit 1.1+
+  cbc.df$chid <- rep(1:(nrow(cbc.df)/3), each=3)
+  
+  # shape the data for mlogit
+  cbc.mlogit <- dfidx(cbc.df, choice="choice", 
+                      idx=list(c("chid", "resp.id"), "alt" ))
+}
+```
+
+```{r}
+library(mlogit)
+m1 <- mlogit(choice ~ 0 + seat + cargo + eng + price, data = cbc.mlogit)
+summary(m1)
+
+```
+
+```{r}
+library(mlogit)
+library(logitr)
+data("yogurt")
+
+yogurt
+
+y_names <- names(yogurt)
+y_names
+```
+```{r}
+library(dfidx)      # install if needed
+
+# add a column with unique question numbers, as needed in mlogit 1.1+
+cbc.df$chid <- rep(1:(nrow(cbc.df)/3), each=3)
+
+# shape the data for mlogit
+yog_mlogit <- dfidx(yogurt, choice="choice", 
+                    idx = list(c("obsID", "id"), "alt" ))
+
+fit_mlog_yog <- mlogit(
+  choice ~ feat + price + 0,
+  data = yog_mlogit
+)
+fit_mlog_yog
+
+fit_mlog_yog2 <- mlogit(
+  choice ~ price + 0,
+  data = yog_mlogit
+)
+fit_mlog_yog2
+
+```
+
+```{r}
+mnl_pref <- logitr(
+  data    = yogurt,
+  outcome = 'choice',
+  obsID   = 'obsID',
+  pars    = c('price', 'feat', 'brand')
+)
+mnl_pref
+```
+
+```{r}
+mxl_pref <- logitr(
+  data     = yogurt,
+  outcome  = "choice",
+  obsID    = "obsID",
+  panelID  = "id",
+  pars     = c("price", "feat", "brand"),
+  randPars = c(feat = "n")
+)
+mxl_pref
+```
+

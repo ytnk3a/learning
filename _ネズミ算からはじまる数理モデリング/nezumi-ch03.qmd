@@ -1,0 +1,157 @@
+---
+title: "nezumi-ch03"
+format: html
+---
+
+# 感染症の拡大
+
+## 3.1 基礎モデリング
+## 3.2 
+## 3.3 
+## 3.4 SIRモデル
+```{r}
+N <- 1000
+Sk <- Ik <- Rk <- rep(0, 40 + 1)
+Sk[1] <- 0.999 * N
+Ik[1] <- 0.001 * N
+Rk[1] <- 0.000 * N
+
+beta_alpha_gamma <- 1.0
+q <- 0.25
+R0 <- 4.0
+
+for (i in 1:40) {
+  
+  Sk[i + 1] <- Sk[i] * exp(- beta_alpha_gamma * Ik[i] / N)
+  Ik[i + 1] <- Sk[i] * (1 - exp(- beta_alpha_gamma * Ik[i] / N)) + (1-q) * Ik[i]
+  Rk[i + 1] <- Rk[i] + q * Ik[i]
+
+}
+plot(1:41,  Sk/N, type = "b")
+lines(1:41, Ik/N, type = "b", col = "tomato")
+lines(1:41, Rk/N, type = "b", col = "steelblue")
+
+plot(Sk/N, Ik/N, type = "b")
+```
+
+## 3.5 SISモデル
+```{r}
+N <- 1000
+
+Sk <- Ik <- Rk <- rep(0, 40 + 1)
+Sk[1] <- 0.999 * N
+Ik[1] <- 0.001 * N
+
+beta_alpha_gamma <- 1.0
+q <- 0.25
+R0 <- 4.0
+
+for (i in 1:40) {
+  
+  Sk[i + 1] <- Sk[i] * exp(- beta_alpha_gamma * Ik[i] / N) + q * Ik[i]
+  Ik[i + 1] <- Sk[i] * (1 - exp(- beta_alpha_gamma * Ik[i] / N)) + (1-q) * Ik[i]
+
+}
+
+eff_repro <- Sk / (q * Ik) * (1 - exp(-beta_alpha_gamma * Ik / N))
+plot(1:41,  Sk/N, type = "b", ylim = c(0, 1))
+lines(1:41, Ik/N, type = "b", col = "tomato")
+lines(1:41, eff_repro/R0, type = "b", col = "lightgreen")
+
+plot(Sk/N, Ik/N, type = "b")
+```
+
+## 3.6 SIRSモデル
+```{r}
+N <- 1000
+i_end <- 300
+Sk <- Ik <- Rk <- rep(0, i_end + 1)
+Sk[1] <- 0.999 * N
+Ik[1] <- 0.001 * N
+
+beta_alpha_gamma <- 1.5
+q <- 0.25
+R0 <- 4.0
+theta <- 0.01
+
+for (i in 1:i_end) {
+  
+  Sk[i + 1] <- Sk[i] * exp(- beta_alpha_gamma * Ik[i] / N) + theta * Rk[i]
+  Ik[i + 1] <- Sk[i] * (1 - exp(- beta_alpha_gamma * Ik[i] / N)) + (1-q) * Ik[i]
+  Rk[i + 1] <- (1 - theta) * Rk[i] + q * Ik[i]
+  
+}
+
+eff_repro <- Sk / (q * Ik) * (1 - exp(-beta_alpha_gamma * Ik / N))
+plot(1:(i_end + 1),  Sk/N, type = "l", ylim = c(0, 1))
+lines(1:(i_end + 1), Ik/N, type = "l", col = "tomato")
+lines(1:(i_end + 1), Rk/N, type = "l", col = "steelblue")
+lines(1:(i_end + 1), eff_repro/R0, type = "b", col = "lightgreen")
+
+plot(Sk/N, Ik/N, type = "b")
+```
+
+```{r}
+sirs_model <- function(q, theta) {
+  N <- 1000
+  i_end <- 300
+  Sk <- Ik <- Rk <- rep(0, i_end + 1)
+  Sk[1] <- 0.999 * N
+  Ik[1] <- 0.001 * N
+  
+  beta_alpha_gamma <- 1.0
+  R0 <- 4.0
+  # q <- 0.25
+  # theta <- 0.01
+  
+  for (i in 1:i_end) {
+    
+    Sk[i + 1] <- Sk[i] * exp(- beta_alpha_gamma * Ik[i] / N) + theta * Rk[i]
+    Ik[i + 1] <- Sk[i] * (1 - exp(- beta_alpha_gamma * Ik[i] / N)) + (1-q) * Ik[i]
+    Rk[i + 1] <- (1 - theta) * Rk[i] + q * Ik[i]
+    
+  }
+  
+  return(list(
+    S = Sk,
+    I = Ik,
+    R = Rk
+  ))
+}
+
+N <- 1000
+theta_seq <- seq(0, 1, by = 0.01)
+Sstar_N <- Istar_N <- Rstar_N <- rep(0, length(theta_seq))
+
+for (i in seq_along(theta_seq)) {
+  # print(i)
+  res <- sirs_model(q = 0.25, theta_seq[i])
+
+  Sstar_N[i] <- tail(res$S, 1) / N
+  Istar_N[i] <- tail(res$I, 1) / N
+  Rstar_N[i] <- tail(res$R, 1) / N
+  
+}
+
+plot(theta_seq, Sstar_N, ylim = c(0, 1), type = "l")
+lines(theta_seq, Istar_N, ylim = c(0, 1), col = "tomato" )
+lines(theta_seq, Rstar_N, ylim = c(0, 1), col = "steelblue" )
+
+q_seq <- seq(0, 1, by = 0.01)
+Sstar_N <- Istar_N <- Rstar_N <- rep(0, length(q_seq))
+
+for (i in seq_along(q_seq)) {
+  # print(i)
+  res <- sirs_model(q = q_seq[i], theta = 0.05)
+
+  Sstar_N[i] <- tail(res$S, 1) / N
+  Istar_N[i] <- tail(res$I, 1) / N
+  Rstar_N[i] <- tail(res$R, 1) / N
+  
+}
+
+plot(theta_seq, Sstar_N, ylim = c(0, 1), type = "l")
+lines(theta_seq, Istar_N, ylim = c(0, 1), col = "tomato" )
+lines(theta_seq, Rstar_N, ylim = c(0, 1), col = "steelblue" )
+```
+

@@ -1,0 +1,36 @@
+---
+title: "Ch.05: 自社サービス登録会員をグループ分けしてみよう　～クラスタリング～"
+output: html_document
+date: "2023-08-03"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 第5章　自社サービス登録会員をグループ分けしてみよう　～クラスタリング～
+## 5-1　「何かの基準に基づいて似たもの同士をまとめる」＝クラスタリング
+## 5-2　Rで利用できるクラスタリング手法たち
+## 5-3　eコマースサイトの顧客データでクラスタリングしてみよう
+
+- `hclust` / `cutree`
+- `kmeans`
+- `mclust`
+- 
+
+
+### 5-3-3 EMアルゴリズム
+```{r}
+library(mclust)
+
+plot(mclustBIC(iris[,-5]))
+```
+```{r}
+res_clst <- hc(modelName = "EEE", data = iris[, -5])
+#> Model-based Agglomerative Hierarchical Clustering
+#> 
+
+head(hclass(res_clst, 3))
+```
+
+

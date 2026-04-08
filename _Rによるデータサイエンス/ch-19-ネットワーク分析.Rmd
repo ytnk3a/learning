@@ -1,0 +1,494 @@
+---
+title: "Ch.19 ネットワーク分析"
+output: html_document
+date: "2024-01-02"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# ネットワーク分析とは
+- ネットワークは頂点(V: veretex)と辺(E: Edge)を基本構成要素とする
+- 方向性をもつ有向グラフと無向グラフの2つある
+
+
+# ネットワークの作成
+```{r}
+library(igraph)
+
+test <- matrix(c(
+  0, 0, 1, 0, 
+  1, 0, 0, 0, 
+  2, 0, 0, 0,
+  4, 3, 0, 0), 
+  4, 4)
+
+colnames(test) <- c("A", "B", "C", "D")
+rownames(test) <- c("A", "B", "C", "D")
+
+test_g <- graph.adjacency(test, weighted = TRUE)
+test_g
+
+cat("node \n")
+V(test_g)
+
+cat("edge \n")
+E(test_g)
+
+cat("weight \n")
+E(test_g)$weight
+```
+```{r}
+plot(test_g)
+```
+
+```{r}
+plot(test_g, layout = layout.circle, edge.label = E(test_g)$weight)
+```
+
+```{r}
+V(test_g)$name
+
+V(test_g)$color <- 2:5
+plot(test_g, layout = layout.circle)
+```
+
+### データフレーム形式のネットワーク作成
+```{r}
+
+c1 <- c("太郎", "花子", "花子", "次郎", "雄大", "紗香", "紗香")
+c2 <- c("花子", "太郎", "次郎", "琴美", "琴美", "太郎", "雄大")
+
+S <- c(10, 2, 9, 6, 8, 8, 5)
+
+test2 <- data.frame(c1, c2, S)
+
+test2_g <- graph.data.frame(test2)
+test2_g
+
+plot(test2_g, edge.label = E(test2_g)$weight)
+```
+
+
+```{r}
+set.seed(80)
+
+x <- c(sample(1:20, 100, replace = TRUE))
+g <- graph(x, directed = FALSE)
+
+op <- par(mfrow = c(2, 3))
+
+plot(g, layout = layout.circle, main = "layout.circle")
+plot(g, layout = layout.kamada.kawai, main = "layout.kamada.kawai")
+plot(g, layout = layout.reingold.tilford, main = "layout.reingold.tilford")
+plot(g, layout = layout.star, main = "layout.star")
+plot(g, layout = layout.davidson.harel, main = "layout.davidson.harel")
+plot(g, layout = layout.grid, main = "layout.grid")
+par(op)
+```
+
+```{r}
+
+op <- par(mfrow = c(1, 3))
+plot(g, layout = layout.star, main = "layout.star")
+plot(g, layout = layout.davidson.harel, main = "layout.davidson.harel")
+plot(g, layout = layout.grid, main = "layout.grid")
+par(op)
+
+```
+
+## ノードとエッジの装飾
+
+```{r}
+g <- graph.ring(length(vertex.shapes()))
+
+plot(
+  g,
+  vertex.shape = vertex.shapes(),
+  vertex.label  = vertex.shapes(),
+  vertex.label.cex   = 1.5,
+  vertex.label.color = 2,
+  vertex.label.dist  = 1,
+  vertex.size = 20,
+  vertex.pie = lapply(vertex.shapes(), function(x) if (x == "pie") 2:6 else 0),
+  vertex.pie.color = list(heat.colors(5)),
+  
+  edge.label = letters[1:length(vertex.shapes())],
+  edge.label.color = "red",
+  edel.label.cex = 2,
+  edge.color = "blue",
+  edge.width = 1:13,
+  edge.arrow.size = 5
+)
+```
+
+# ネットワークの統計量
+
+- 次数 
+- 密度
+- 中心性の指標
+- クラスター係数
+- 次数相関係数
+- パス係数
+
+- ノード数
+- エッジ数
+```{r}
+vcount(test_g)
+
+ecount(test_g)
+```
+
+```{r}
+neighbors(test_g, "A")
+```
+
+各ノードの自由度
+```{r}
+degree(test_g)
+```
+
+全体ノードの自由度
+```{r}
+mean(degree(test_g))
+```
+
+### 密度
+
+密度はネットワークに含まれる関係の疎密を表す
+
+有向グラフでは $ density = m / n(n-1) $
+無向グラフでは $ densiti = 2 m / n(n-1) $
+
+
+```{r}
+graph.density(test_g)
+
+n <- vcount(test_g)
+m <- ecount(test_g)
+
+m / (n * (n - 1))
+```
+
+
+たとえば、すべてのノード間がリンクした完備グラフとツリー型のグラフの密度を比較する
+
+```{r}
+g_full <- graph.full(5)
+g_tree <- graph.tree(5)
+
+graph.density(g_full)
+graph.density(g_tree)
+
+```
+
+```{r}
+op <- par(mfrow = c(1, 2))
+plot(g_full, size = 20, main = "full graph")
+plot(g_tree, size = 20, main = "tree graph")
+par(op)
+```
+
+
+### 中心性
+- 次数中心性
+- 接近中心性
+  - グラフにおけるあるノードと他のノードとの距離に関する指標
+  
+$$
+closenness = \frac{1}{\sum^{i \ne j}_{all\ i,j} d(n_i, n_j)}
+$$
+
+  - $d(n_i, n_j)$ はノードi, jの最短距離    
+  - 接近中心性は値が小さい程中心性が高い
+  
+- 固有ベクトル中心性
+  隣接行列の第1固有ベクトルを用いて、隣接するノードの中心性を評価する指標
+  値が大きいほど中心性が高いとする
+    
+- 媒介中心性
+  - あるノードに対して、その他の2点を結ぶ最短経路がどれくらいそのノードを通過しているかをもとに、
+    中心性を評価する指標
+
+```{r}
+closeness(test_g)
+```
+
+```{r}
+betweenness(test_g)
+```
+```{r}
+evcent(test_g)$vector
+```
+
+```{r}
+page.rank(test_g)$vector
+```
+
+```{r}
+bonpow(test_g)
+```
+
+## クラスターの係数
+- ノードの近傍の関係を示す度合、
+  隣り合うノードの間に三角形のグループがいくつ形成されているかに関する指標
+- 推移性とも呼ばれている
+
+```{r}
+transitivity(test_g)
+
+transitivity(test_g, type = "local")
+```
+
+$$
+G_{transitivity} = \frac{\sum(B \times A)}{\sum(B)} = \frac{3 \times 三角形の数}{2つのエッジ数を持つノード数}
+$$
+
+Bは隣接行列Aの内積($A %*% A$) の主対角成分をゼロにした行列
+ローカルクラスター係数は、次の式で定義されている
+
+$$
+ L_{transitivity} = \frac{2 \times v_i を含む三角形の数}{k_i(k_i - 1)}
+$$
+
+
+## 次数の相関係数
+- ネットワーク内の任意の2つのノード間の次数の関連性を示す指標としての次数相関 assortativity coefficientがある
+
+```{r}
+g <- graph(c(1, 2, 2, 3, 3, 1, 1, 4), directed = FALSE)
+assortativity.degree(g, directed = FALSE)
+```
+
+$$
+r = \frac{ M_{-1} \sum^M_i j_i k_i - ((2M)^{-1} \sum^M_i (j_i + k_i ))^2}{ (2M)^{-1} \sum^M_{i, j} (j_i^2 + k^2_i) - ((2M)^{-1} \sum^M_i (j_i+k_i))^2 }
+$$
+
+## パスの長さ
+
+```{r}
+g_tree5 <- graph.tree(5)
+
+shortest.paths(g_tree5)
+shortest.paths(g_tree5, 3, 4:5) # from 3 to 4 and 5
+average.path.length(g_tree5)
+```
+
+## グラフの比較
+```{r, fig.width=12}
+library(igraphdata)
+data(foodwebs)
+
+op <- par(mfrow = c(1, 3))
+plot(foodwebs[[1]], vertex.size = 2, edge.arrow.size = 0.1)
+plot(foodwebs[[2]], vertex.size = 2, edge.arrow.size = 0.1)
+plot(foodwebs[[3]], vertex.size = 2, edge.arrow.size = 0.1)
+par(op)
+```
+
+```{r}
+cat("ノードの数\n")
+vcount(foodwebs[[1]])
+vcount(foodwebs[[2]])
+vcount(foodwebs[[3]])
+
+cat("エッジの数\n")
+ecount(foodwebs[[1]])
+ecount(foodwebs[[2]])
+ecount(foodwebs[[3]])
+
+
+cat("密度")
+graph.density(foodwebs[[1]])
+graph.density(foodwebs[[2]])
+graph.density(foodwebs[[3]])
+
+# cat("接近中心性の平均 \n")
+# closeness(foodwebs[[1]])
+# closeness(foodwebs[[2]])
+# closeness(foodwebs[[3]])
+
+cat("クラスター係数\n")
+transitivity(foodwebs[[1]])
+transitivity(foodwebs[[2]])
+transitivity(foodwebs[[3]])
+
+cat("次数相関係数\n")
+assortativity.degree(foodwebs[[1]])
+assortativity.degree(foodwebs[[2]])
+assortativity.degree(foodwebs[[3]])
+
+cat("パス平均\n")
+average.path.length(foodwebs[[1]])
+average.path.length(foodwebs[[2]])
+average.path.length(foodwebs[[3]])
+```
+```{r, fig.width=12}
+g21 <- graph.difference(foodwebs[[2]], foodwebs[[1]])
+plot(g21, vertex.size = 2, edge.arrow.size = 0.2)
+```
+
+Blue Crabと関連性のあるノードを `neighbors` 関数を使って、抽出
+
+```{r}
+n_neigh <- neighbors(foodwebs[[2]], "Blue Crab", mode = "all")
+g_sub <- induced.subgraph(foodwebs[[2]], n_neigh)
+
+plot(g_sub)
+```
+
+# コミュニティ分析
+ネットワーク内のサブネットワークのことをコミュニティと呼ぶ
+ネットワークにおけるコミュニティの抽出はクラスター分析と同様な性質があり、
+1つのコミュニティが1つのクラスターとして、考えられる
+
+ここで、コミュニティの抽出は
+- オーバーラッピングを考える方法と
+- 考えない方法
+の2つに大別される
+
+
+## 分割
+```{r}
+
+op <- par(mfrow = c(2, 2), mal = c(2, 1, 1, 1))
+
+g1 <- graph.full(6)
+g2 <- graph.full(5)
+
+g <- g1 %du% g2
+plot(g); box()
+
+g <- add.edges(g, c(1, 9, 4, 7))
+plot(g); box()
+
+bc <- edge.betweenness.community(g)
+plot(bc, g); box()
+
+dendPlot(bc); box()
+par(op)
+
+
+```
+
+コミュニティのクラスタリングには、次のQ値(modularity)が最大になるような分割を行う方法が多く用いられる
+
+$$
+Q = \frac{1}{2M} \sum_{i, j} (A_{ij} - \frac{k_i k_j}{2M}) \delta(c_i, c_j)
+$$
+$\delta(c_i, c_j)$ はノード $i$ と $j$ が同じクラスターに属する場合は1
+そうでない場合は0を取る
+
+コミュニティの抽出には下記のような方法が提案されている
+- edge.betweenness.community: エッジの媒介法
+- fastgreedy.community: 貪欲法
+- spinglass.community: 焼きなまし法
+- walktrap.community: ランダムウォーク法
+- multilevel.community: 多段階最適法
+- leading.eigenvector.community: 固有ベクトル法
+- optimal.community: 全探索法
+
+```{r}
+data(karate)
+V(karate)
+
+bet <- betweenness(karate)
+
+max(bet)
+
+col <- colors()[1:length(bet)]
+E(karate)$weight
+
+plot(karate, vertex.size = bet/10, vertex.color = col, edge.width = E(karate)$weight)
+```
+上記の図からは2つのコミュニティが見られる。
+そこで、コミュニティについて分析を行う
+```{r}
+
+wc <- walktrap.community(karate)
+sizes(wc)
+
+membership(wc)
+```
+
+```{r}
+plot(wc, karate, vertex.label = V(karate)$name)
+dendPlot(wc)
+```
+
+## オーバーラッピング
+
+リンク間のジャッカード係数をもとにした類似度で分割を行う
+- $e_{ik}, \ e_{jk}$ はノード$k$が共有するエッジ
+- $n_{+i}$ はノード$i$の一次近隣のノード総数
+
+$$
+S(e_{ik}, e_{jk}) = \frac{|n_{+i} \cap n_{+j} |}{| n_{+i} \cup n_{+j} |}
+$$
+重み付き有向グラフは次のTanimoto係数を使う
+
+$$
+S(e_{ik}, e_{jk}) = \frac{ a_i a_j }{|a_i|^2 + |a_j|^2 - a_ia_j}
+$$
+- $a_i$ はノード$i$の一次近隣ノード間の重み
+
+```{r}
+library(linkcomm)
+d_karate <- get.data.frame(karate)
+
+head(d_karate, n = 3)
+```
+```{r}
+g_lc <- getLinkCommunities(d_karate, hcmethod = "ward.D")
+```
+
+メンバーを抜き出すには `getNodesIn` を使う
+```{r}
+getNodesIn(g_lc, clusterids = 1)
+getNodesIn(g_lc, clusterids = 2)
+getNodesIn(g_lc, clusterids = 3)
+```
+オーバーラップしたノードだけを取り出すには `get.shared.nodes()` 関数を使う
+```{r}
+get.shared.nodes(g_lc, comms = c(2, 3))
+```
+各コミュニティごとの中心性などの統計量を出すには
+```{r}
+getCommunityConnectedness(g_lc)
+```
+
+## 視覚化
+```{r}
+plot(g_lc, type = "graph")
+plot(g_lc, type = "graph", layout = "spencer.circle", scale.vertices = 0.5)
+```
+
+- 
+```{r}
+plot(g_lc, type = "summary")
+```
+
+- オーバーラップに関する視覚に関して
+
+
+```{r}
+plot(g_lc, type = "members")
+plot(g_lc, type = "members", nodes = head(names(g_lc$numclusters), 12))
+```
+```{r}
+names(g_lc$numclusters)
+```
+
+```{r}
+plotLinkCommMembers(
+  g_lc, 
+  nodes = head(names(g_lc$numclusters), 10),
+  pal = brewer.pal(11, "Spectral"),
+  shape = "rect",
+  total = TRUE,
+  fontsize = 15,
+  nspace = 1.5,
+  maxclusters = 20)
+```
+

@@ -1,0 +1,71 @@
+---
+title: "Ch.18 ニューラルネットワーク"
+output: html_document
+date: "2024-01-02"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(nnet)
+library(h2o)
+library(tidyverse)
+library(kernlab)
+
+data(spam)
+```
+
+## モデルの分類
+- 階層型ネットワーク
+- 非階層型ネットワーク
+
+### 単一中間層ニューラルネットワーク
+
+```{r}
+
+even_n <- 2 * (1:75)
+
+iris_train <- iris[even_n, ]
+iris_test  <- iris[-even_n, ]
+
+iris_nnet <- nnet(Species ~ ., size = 3, decay = 0.1, data = iris_train)
+
+iris_nnet_pred <- predict(iris_nnet, iris_test[, -5], type = "class")
+table(iris_test[, 5], iris_nnet_pred)
+```
+
+
+
+# 深層学習
+
+```{r}
+h2o.init()
+
+spam_hex <- as.h2o(spam)
+
+tr <- h2o.deeplearning(x = 1:57, y = 58, training_frame = spam_hex, hidden = c(30, 20, 10), epochs = 100, nfolds = 3)
+tr
+```
+
+# 学習ベクトル量子化 / MVQ: Learning Vector Quantization
+
+LVQ1は収束を速めるように設計
+LVQ2 / LVQ3 はロバストに設計
+
+OLVQ1はLVQ1をより収束を速めるように設計
+
+```{r}
+library(class)
+
+cl <- iris_train[, 5]
+cd <- lvqinit(iris_train[, 1:4], cl)
+cd
+
+cd1 <- lvq1(iris_train[, 1:4], cl, cd)
+cd1
+
+test_res <- lvqtest(cd1, iris_test[, 1:4])
+test_res
+
+table(iris_test[, 5], test_res)
+```
+

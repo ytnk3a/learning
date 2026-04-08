@@ -1,0 +1,85 @@
+---
+title: "3章"
+format: html
+editor: source
+---
+
+
+```{r}
+library(gapminder)
+```
+
+```{r}
+p <- ggplot(data = gapminder, aes(x = gdpPercap, y = lifeExp))
+  
+
+p + geom_point()
+
+p + geom_smooth()
+
+p + 
+  geom_point() +
+  geom_smooth()
+```
+```{r}
+p +
+  geom_point() +
+  geom_smooth(method = "lm")
+
+p +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  scale_x_log10()
+
+p +
+  geom_point() +
+  geom_smooth(method = "gam") +
+  scale_x_log10()
+
+p +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  scale_x_log10(labels = scales::dollar)
+```
+
+## 3.5 審美的要素のマッピングとテーマの設定
+```{r}
+p <- ggplot(data = gapminder, aes(x = gdpPercap, y = lifeExp, color = continent))
+
+p + 
+  geom_point() +
+  geom_smooth(method = "loess") +
+  scale_x_log10(labels = scales::dollar)
+```
+
+```{r}
+ggplot(data = gapminder, aes(x = gdpPercap, y = lifeExp, color = continent, fill = continent)) +
+  geom_point() +
+  geom_smooth(method = "loess") +
+  scale_x_log10(labels = scales::dollar) +
+  labs(
+    x = "GDP Per Capita",
+    y = "Life Expectancy in Years",
+    title = "Economic Growth and Life Expectancy",
+    subtitle = "Data points are country-years",
+    caption = "Source: Gapminder."
+  )
+```
+
+## 3.6 審美的要素は`geom`でもマッピングできる
+
+pointのみ色分けし、smootheでは一つの線を使いたい場合
+
+```{r}
+ggplot(data = gapminder, aes(x = gdpPercap, y = lifeExp)) +
+  geom_point(aes(color = continent)) +
+  geom_smooth(method = "loess") +
+  scale_x_log10(labels = scales::dollar) +
+  labs(
+    x = "GDP Per Capita",
+    y = "Life Expectancy in Years",
+    title = "Economic Growth and Life Expectancy",
+    subtitle = "Data points are country-years",
+    caption = "Source: Gapminder."
+  )
+```

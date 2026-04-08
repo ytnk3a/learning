@@ -1,0 +1,75 @@
+---
+title: "ch.06"
+format: html
+editor: source
+---
+
+
+```{r}
+library(tidyverse)
+library(mlogit)
+```
+
+
+```{r}
+d_raw <- read.csv("chapter_06.csv")
+cr_data <- mlogit.data(d_raw, choice = "choice", id = "id", varying = 2:13, shape = "wide", sep = ".")
+```
+
+
+```{r}
+fit_mlog <- mlogit(choice ~ disp + feat + price, data = cr_data, reflevel = "private")
+summary(fit_mlog)
+
+predict(fit_mlog)
+
+org_keebler <- fit_mlog$probabilities %>% as_tibble() %>% 
+  select(keebler) 
+```
+
+```{r}
+d_new <- d_raw %>% 
+  mutate(
+    price.keebler = price.keebler * 1.1
+  )
+
+cr_data2 <- mlogit.data(d_new, choice = "choice", id = "id", varying = 2:13, shape = "wide", sep = ".")
+
+predict(fit_mlog, newdata = cr_data2) %>% as_tibble() %>% 
+  select(keebler) -> new_keebler_11
+
+d_new <- d_raw %>% 
+  mutate(
+    price.keebler = price.keebler * 1.2
+  )
+
+cr_data2 <- mlogit.data(d_new, choice = "choice", id = "id", varying = 2:13, shape = "wide", sep = ".")
+
+predict(fit_mlog, newdata = cr_data2) %>% as_tibble() %>% 
+  select(keebler) -> new_keebler_12
+
+d_new <- d_raw %>% 
+  mutate(
+    price.keebler = price.keebler * 1.3
+  )
+
+cr_data2 <- mlogit.data(d_new, choice = "choice", id = "id", varying = 2:13, shape = "wide", sep = ".")
+
+predict(fit_mlog, newdata = cr_data2) %>% as_tibble() %>% 
+  select(keebler) -> new_keebler_13
+```
+
+```{r}
+data.frame(
+  org = org_keebler$keebler,
+  new1 = new_keebler_11$keebler,
+  new2 = new_keebler_12$keebler,
+  new3 = new_keebler_13$keebler
+) %>% 
+  ggplot() +
+  geom_point(aes(x = org, y = new1), color = "tomato") +
+  geom_point(aes(x = org, y = new2), color = "skyblue") +
+  geom_point(aes(x = org, y = new3), color = "yellow")
+```
+
+

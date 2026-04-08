@@ -1,0 +1,161 @@
+---
+title: "Ch.14 非線形判別分析"
+output: html_document
+date: "2023-12-30"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# 非線形判別分析とは
+```{r}
+library(MASS)
+
+iris_lab <- c(rep("S", 50), rep("C", 50), rep("V", 50))
+
+iris1 <- data.frame(iris[, 1:4], Species = iris_lab)
+
+even_n <- 2 * (1:75) - 1
+
+iris_train <- iris1[even_n, ]
+iris_test <- iris1[-even_n, ]
+```
+
+
+```{r}
+z_qda <- qda(Species ~ ., data = iris_train)
+z_qda
+```
+
+```{r}
+table(iris_train[, 5], predict(z_qda)$class)
+```
+```{r}
+y_qda <- predict(z_qda, iris_test)
+
+table(iris_test[, 5], y_qda$class)
+```
+
+# 距離による判別分析
+学習データからグループ $G_1$、 $G_2$ の中心 $M_1$ 、 $M_2$ を求め、次に未知の個体 $H$ とグループの中心との距離
+$d(M_1, H), \ d(M_2, H)$ を測り、距離が近いグループに属すると判断する
+
+距離による判別分析には、データの分散の情報を用いたマハラノビス(Mahalanobis)距離が用いられる
+
+$$
+D(X, \mu) = \{(X - \mu)^t \Sigma^{-1} (X - \mu)\}^{\frac{1}{2}}
+$$
+
+
+```{r}
+seto_mean <- apply(iris_train[1:25, -5], 2, mean)
+seto_var  <- var(iris_train[1:25, -5])
+
+vers_mean <- apply(iris_train[26:50, -5], 2, mean)
+vers_var  <- var(iris_train[26:50, -5])
+
+virg_mean <- apply(iris_train[51:75, -5], 2, mean)
+virg_var  <- var(iris_train[51:75, -5])
+```
+```{r}
+D1 <- mahalanobis(iris_train[, -5], seto_mean, seto_var)
+D2 <- mahalanobis(iris_train[, -5], vers_mean, vers_var)
+D3 <- mahalanobis(iris_train[, -5], virg_mean, virg_var)
+
+D1[1:6]
+D2[1:6]
+D3[1:6]
+
+# 各個体と3つのグループ中心との距離を計算し、距離の値が小さいグループに所属
+round(cbind(D1, D2, D3), 0) %>% head()
+```
+
+```{r}
+D1_t <- mahalanobis(iris_test[, -5], seto_mean, seto_var)
+D2_t <- mahalanobis(iris_test[, -5], vers_mean, vers_var)
+D3_t <- mahalanobis(iris_test[, -5], virg_mean, virg_var)
+
+# 各個体と3つのグループ中心との距離を計算し、距離の値が小さいグループに所属
+round(cbind(D1_t, D2_t, D3_t), 0) %>% head()
+```
+
+# 多数決による判別分析
+
+k最近傍法では、判別すべき個体の周辺の個体で最も近いものをk個を見つけ、
+そのk個の多数決により、どのグループに属するかを判断する
+k-nnは判別を行うときに記憶しておいたデータの距離を求める必要があるので、
+記憶ベース推論法とも呼ばれる
+
+
+```{r}
+library(class)
+iris_knn <- knn(iris_train[, -5], iris_test[, -5], iris_train[, 5], k = 5)
+
+(table(iris_knn, iris_test[, 5]))
+```
+
+```{r}
+pairs(
+  iris_test[, 1:4],
+  pch = as.character(iris[, 5]),
+  col = c(3, 2)[(iris_test$Species != iris_knn) + 1]
+)
+```
+
+```{r}
+(iris_test$Species != iris_knn) + 1
+c(3, 2)[(iris_test$Species != iris_knn) + 1]
+```
+
+下記のようにc`c(1,2,3)` のセルの番号を取る`c(1,1)` の場合、1つめを二つとるということ
+```{r}
+c(1, 2, 3)[c(1, 1)]
+```
+
+# ベイズ判別法
+```{r}
+library(klaR)
+library(mlbench)
+
+data(Glass)
+
+g_data <- Glass[, c(1:5, 10)]
+g_data
+```
+
+
+```{r}
+m1 <- NaiveBayes(Type ~ ., data = g_data)
+m1_pred <- predict(m1)
+
+tem1 <- table(g_data$Type, m1_pred$class)
+1 - sum(diag(tem1)) / sum(tem1)
+```
+
+```{r}
+m2 <- NaiveBayes(Type ~ ., data = g_data, usekernel = TRUE)
+m2_pred <- predict(m2)
+
+tem2 <- table(g_data$Type, m2_pred$class)
+1 - sum(diag(tem2)) / sum(tem2)
+```
+
+```{r}
+m3 <- lda(Type ~ ., data = g_data)
+m3_pred <- predict(m3)
+
+tem3 <- table(g_data$Type, m3_pred$class)
+1 - sum(diag(tem3)) / sum(tem3)
+```
+
+```{r}
+set.seed(1)
+m4 <- knn(g_data[, -6], g_data[, -6], g_data[, 6], k = 5)
+
+tem4 <- table(g_data$Type, m4)
+1 - sum(diag(tem4)) / sum(tem4)
+```
+
+

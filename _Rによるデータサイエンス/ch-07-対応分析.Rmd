@@ -1,0 +1,134 @@
+---
+title: "Ch.07 対応分析"
+output: html_document
+date: "2023-12-22"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(FactoMineR)
+library(MASS)
+```
+
+
+# 対応分析とは
+データの構造を再現する面では主成分分析より効果が劣るが、
+パターンを分類する面では主成分分析よりよい結果を示すケースが多い
+```{r}
+caith
+```
+caith: イギリスに住んでいる人の目の色(blue, light, medium, ,,,)と髪の色(fair, red, medium, dark, black)のデータ
+
+
+# 対応分析の基礎
+```{r}
+res_ca <- corresp(caith, nf = 4)
+res_ca
+```
+- 正準相関と固有値
+```{r}
+ca_eig <- res_ca$cor^2
+
+round(ca_eig, 3)
+# Cumulative Proportion
+cum_prop <- round(ca_eig / sum(ca_eig) * 100, 2)
+cum_prop
+```
+
+正準相関分析とは２つの変数群を２つの合成変数にまとめ、その合成変数間の相関係数を最大にする方法
+
+- 得点のバイプロット
+
+```{r}
+biplot(res_ca)
+```
+```{r}
+biplot(res_ca, type = "row")
+biplot(res_ca, type = "col")
+```
+
+# 多重対応分析
+
+```{r}
+farms
+```
+- Mois:   Five levels of soil moisture – level 3 does not occur at these 20 farms.
+- Manag:  Grassland management type (SF = standard, BF = biological, HF = hobby farming, NM = nature conservation).
+- Use:    Grassland use (U1 = hay production, U2 = intermediate, U3 = grazing).
+- Manure: Manure usage – classes C0 to C4
+
+## MASS::mcaを使った多重対応分析
+
+```{r}
+res_mca <- mca(farms, abbrev = TRUE)
+res_mca
+
+eqscplot(res_mca$cs, type = "n")
+text(res_mca$rs, cex = 0.7, col = "red")
+text(res_mca$cs, labels = dimnames(res_mca$cs)[[1]], cex = 0.7)
+```
+
+## MASS::correspを使った多重対応分析
+
+```{r}
+farms_dumm <- makedummies::makedummies(farms)
+
+res_corresp <- corresp(farms_dumm, nf = 2)
+res_corresp
+
+biplot(res_corresp)
+
+```
+# 多元表の対応分析
+```{r}
+UCBAdmissions
+```
+```{r}
+dim(UCBAdmissions)
+```
+
+## 多元分割表の度数を重みとして扱う
+
+```{r}
+d_ucba <- data.frame(UCBAdmissions)
+head(d_ucba)
+```
+
+```{r}
+res_mca_ucba <- MCA(d_ucba, quanti.sup = 4, row.w = d_ucba[, 4])
+```
+
+- 変数間の関係をみる
+
+plot()関数の引数に `choix = "var"` を指定する
+下記のグラフよりAdmitとGenderが近く、DeptとFreqが離れている
+これはFreqはDept(学科)によって大きく異なる、
+また、AdmitはGenderによって左右されていないことが示唆される。
+
+近い変数同士は関係が薄く、遠い変数同士は関係が高い
+```{r}
+head(d_ucba, 2)
+plot(res_mca_ucba, choix = "var")
+```
+
+- 要素
+```{r}
+plot(res_mca_ucba, invisible = "ind")
+```
+
+## 多次元分割表の専用関数を用いた対応分析
+
+```{r}
+library(ca)
+
+res_mjca <- mjca(UCBAdmissions, lambda = "indicator")
+```
+
+```{r}
+plot(res_mjca)
+```
+```{r}
+plot(res_mjca, map = "rowgab")
+```
+

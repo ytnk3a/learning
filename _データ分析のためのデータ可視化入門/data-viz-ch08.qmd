@@ -1,0 +1,181 @@
+---
+title: "8章：プロットを整える"
+format: html
+editor: source
+---
+
+```{r}
+library(tidyverse)
+library(gapminder)
+library(socviz)
+library(ggpmisc)
+```
+
+## 8.1 
+```{r}
+head(asasec)
+```
+
+## 8.4 テーマ要素を実務的に使う
+### fig 8.16
+```{r, fig.height=10}
+
+yrs <- c(seq(1972, 1988, 4), 1993, seq(1996, 2016, 4))
+
+mean_age <- gss_lon %>% 
+  filter(age %nin% NA && year %in% yrs) %>% 
+  group_by(year) %>% 
+  summarise(xbar = round(mean(age, na.rm = TRUE), 0))
+
+mean_age$y <- 0.2
+
+yr_labs <- data.frame(
+  x = 85,
+  y = 0.8,
+  year = yrs
+)
+
+p <- ggplot(
+  data = subset(gss_lon, year %in% yrs),
+  aes(x = age)
+) +
+  geom_density(aes(y = after_stat(scaled)), fill = "gray20", color = NA, alpha = 0.9) +
+  geom_vline(
+    data = subset(mean_age, year %in% yrs),
+    aes(xintercept = xbar),
+    color = "white",
+    size = 0.5
+  ) +
+  geom_text(
+    data = subset(mean_age, year %in% yrs),
+    aes(x = xbar, y = y, label = xbar),
+    color = "white",
+    size = 5,
+    fontface = "bold",
+    hjust = -0.25
+  ) +
+  geom_text(
+    data = subset(yr_labs, year %in% yrs),
+    aes(x = x, y = y, label = year),
+    size = 4,
+    fontface = "bold"
+  ) +
+  facet_grid(rows = vars(year), switch = "y") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    strip.text.y = element_blank(),
+    strip.background = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank()
+  )
+
+p
+```
+```{r, fig.height=8}
+library(ggridges)
+
+ggplot(
+  data = gss_lon,
+  aes(x = age, y = factor(year, levels = rev(unique(year)), ordered = TRUE))
+) +
+  geom_density_ridges(alpha = 0.6, fill = "gray20", scale = 1.5) +
+  theme_ridges() +
+  labs(
+    x = "Age",
+    y = NULL
+  )
+
+ggplot(
+  data = gss_lon,
+  aes(x = age, y = factor(year, levels = rev(unique(year)), ordered = TRUE))
+) +
+  geom_density_ridges(alpha = 0.6, fill = "gray20", scale = 3) +
+  theme_ridges() +
+  labs(
+    x = "Age",
+    y = NULL
+  )
+```
+
+## 8.5 ケーススタディ
+
+```{r}
+head(fredts)
+```
+
+```{r}
+fredts_m <- fredts %>% 
+  select(date, sp500_i, monbase_i) %>% 
+  pivot_longer(cols = sp500_i:monbase_i, names_to = "series", values_to = "score")
+
+p1 <- ggplot(fredts_m, aes(x = date, y = score, group = series, color = series)) +
+  geom_line()
+
+p2 <- ggplot(fredts, aes(x = date, y = sp500_i - monbase_i)) +
+  geom_line()
+```
+
+```{r}
+library(cowplot)
+plot_grid(p1, p2, nrow = 2, rel_heights = c(0.75, 0.25), align = "v")
+```
+
+```{r}
+head(yahoo)
+```
+
+
+```{r}
+ggplot(
+  yahoo,
+  aes(x = Employees, y = Revenue)
+  ) +
+  geom_path(color = "gray80") +
+  geom_text(aes(color = Mayer, label = Year), size = 3,fontface = "bold") +
+  theme(legend.position = "bottom") 
+```
+
+```{r}
+ggplot(
+  yahoo,
+  aes(x = Year, y = Revenue/Employees)
+  ) +
+  geom_vline(xintercept = 2012) +
+  geom_line(color = "gray60", size = 2) +
+  annotate(
+    "text",
+    x = 2013, y = 0.44,
+    label = "Mayer Become CEO",
+    size = 2.5
+  )
+```
+
+```{r}
+f_labs <- c(`Borrowers` = "Percent of \nall Borrowers", `Balances` = "Percent of \nall Balance")
+
+ggplot(
+  data = studebt,
+  aes(x = Debt, y = pct / 100, fill = type)
+) +
+  geom_col() +
+  facet_wrap(~ type, labeller = as_labeller(f_labs)) +
+  coord_flip()
+```
+
+```{r}
+ggplot(
+  data = studebt,
+  aes(x = type, y = pct / 100, fill = Debtrc)
+) + 
+  geom_bar(stat = "identity", color = "white") +
+  guides(
+    fill = guide_legend(reverse = TRUE, title.position = "top", 
+                        label.position = "bottom", keywidth = 3.5, nrow = 1)
+  ) +
+  theme(legend.position = "top") +
+  coord_flip()
+```
+

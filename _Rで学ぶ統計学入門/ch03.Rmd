@@ -1,0 +1,164 @@
+---
+title: "Ch.03 大数の法則 / 正規分布 / 中心極限定理"
+output: html_document
+date: "2023-08-08"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 3.1 大数の法則
+```{r}
+n_sim <- 10
+plot(dbinom(0:10, n_sim, 0.5), type = "h", lwd = 3)
+```
+
+
+```{r}
+pbinom(6, 10, 0.5) - pbinom(3, 10, 0.5)
+pbinom(60, 100, 0.5) - pbinom(39, 100, 0.5)
+pbinom(510, 1000, 0.5) - pbinom(489, 1000, 0.5)
+pbinom(5100, 10000, 0.5) - pbinom(4899, 10000, 0.5)
+
+
+cal_range <- function(n_sim, lower, upper) {
+  pbinom(n_sim * upper, n_sim, 0.5) - pbinom(n_sim * lower - 1, n_sim, 0.5)
+}
+
+cat("0.4~0.6\n")
+cal_range(10, 0.4, 0.6)
+cal_range(50, 0.4, 0.6)
+cal_range(100, 0.4, 0.6)
+
+cat("0.49~0.51\n")
+cal_range(200, 0.49, 0.51)
+cal_range(500, 0.49, 0.51)
+cal_range(1000, 0.49, 0.51)
+cal_range(10000, 0.49, 0.51)
+```
+# 3.2 正規分布
+```{r}
+x_seq <- seq(-4, 4, length.out = 1000)
+x_seq2 <- seq(-4, 4, length.out = 1000)
+y_seq2 <- dnorm(x_seq2, mean = 0, sd = 1)
+plot(x_seq, dnorm(x_seq, mean = 0, sd = 1), type = "l", xlab = "", ylab = "", frame.plot = FALSE, axes = FALSE, ) 
+polygon(c(min(x_seq2), x_seq2, max(x_seq2)), c(0, y_seq2, 0), col = "black")
+lines(x = 0, y = dnorm(0, mean = 0, sd = 1), type = "h", col = "tomato", lwd = 4)
+```
+```{r}
+x_seq <- seq(-4, 4, length.out = 1000)
+x_seq2 <- seq(-4, -1.96, length.out = 1000)
+x_seq3 <- seq(1.96, 4, length.out = 1000)
+y_seq2 <- dnorm(x_seq2, mean = 0, sd = 1)
+y_seq3 <- dnorm(x_seq3, mean = 0, sd = 1)
+# plot(x_seq, dnorm(x_seq, mean = 0, sd = 1), type = "l", xlab = "", ylab = "", frame.plot = FALSE, axes = FALSE, ) 
+plot(x_seq, dnorm(x_seq, mean = 0, sd = 1), type = "l", xlab = "", ylab = "", frame.plot = FALSE, axes = TRUE, ) 
+polygon(c(min(x_seq2), x_seq2, max(x_seq2)), c(0, y_seq2, 0), col = "gray")
+polygon(c(min(x_seq3), x_seq3, max(x_seq3)), c(0, y_seq3, 0), col = "gray")
+# polygon(c(min(x_seq2), x_seq2, max(x_seq2)), c(0, y_seq2, 0), col = "black")
+# lines(x = 1.96, y = dnorm(1.96, mean = 0, sd = 1), type = "h", col = "tomato", lwd = 4)
+# lines(x = -1.96, y = dnorm(1.96, mean = 0, sd = 1), type = "h", col = "tomato", lwd = 4)
+```
+
+```{r}
+x_seq <- seq(-4, 4, length.out = 1000)
+x_seq2 <- seq(0, 1, length.out = 1000)
+y_seq2 <- dnorm(x_seq2, mean = 0, sd = 1)
+plot(x_seq, dnorm(x_seq, mean = 0, sd = 1), type = "l", xlab = "", ylab = "prob") 
+grid()
+polygon(c(min(x_seq2), x_seq2, max(x_seq2)), c(0, y_seq2, 0), col = "gray")
+lines(x = 0, y = dnorm(0, mean = 0, sd = 1), type = "h")
+lines(x = 1, y = dnorm(1, mean = 0, sd = 1), type = "h")
+lines(x = 2, y = dnorm(2, mean = 0, sd = 1), type = "h")
+text(0.5, 0.05, "34.1%")
+# abline(v = 0)
+
+norma_area <- function(x_min, x_max) {
+  
+  norm_range <- seq(-4, 4, length.out = 1000)
+  x_range <- seq(x_min, x_max, length.out = 1000)
+  y_range <- dnorm(x_range, mean = 0, sd = 1)
+  
+  plot(
+    norm_range, dnorm(norm_range, mean = 0, sd = 1),
+    type = "l", xlab = "", ylab = "Pr"
+    )
+  lines(x = x_min, y = dnorm(x_min, mean = 0, sd = 1), type = "h")
+  lines(x = x_max, y = dnorm(x_max, mean = 0, sd = 1), type = "h")
+  polygon(
+    c(x_min, x_range, x_max),
+    c(0, y_range, 0),
+    col = "gray"
+  )
+  area <- pnorm(x_max, mean = 0, sd = 1) - pnorm(x_min, mean = 0, sd = 1)
+  text(mean(c(x_min, x_max)), 0.05, paste0(round(area * 100, 1), "%"), adj = 0.5)
+  
+}
+
+norma_area(0, 1)
+norma_area(0, 2)
+
+```
+
+# 3.3 中心極限定理
+
+標本の示す平均値は標本の大きさnが大きくなると、真の値（母平均）の周りに
+正規分布を伴いながら母平均に収束する
+
+母集団分布がどのようなものであっても、標本の平均値は正規分布になる
+
+
+```{r}
+n <- 1000   # 標本数
+m <- 100000 # シミュレーション回数
+
+mean_d <- numeric(m)
+
+for (k in 1:m) {
+  d <- runif(n, 0, 10) # 0~10までの連続一様分布からn個サンプリング
+  mean_d[k] <- mean(d) # その平均をとる
+}
+
+hist(mean_d, breaks = 50) # シミュレーション回数m回分のヒストグラムで正規分布かどうかを見る
+qqnorm(mean_d)            # QQプロットでもチェック
+```
+
+```{r, fig.asp=1}
+n_ss <- 10
+n_sim <- 1000
+
+sample_uni_mean <- numeric(n_sim)
+sample_beta_mean <- numeric(n_sim)
+for (i in 1:n_sim) {
+  
+  sample_uni  <- runif(n_ss, min = -3, max = 5)
+  sample_beta <- rbeta(n_ss, 3, 5)
+  
+  sample_uni_mean[i] <- mean(sample_uni)
+  sample_beta_mean[i] <- mean(sample_beta)
+  
+}
+
+hist(sample_uni_mean, breaks = 50)
+qqnorm(sample_uni_mean)
+
+hist(sample_beta_mean, breaks = 50)
+qqnorm(sample_beta_mean)
+
+n_ss <- 100
+n_sim <- 1000
+
+sample_uni_mean <- numeric(n_sim)
+for (i in 1:n_sim) {
+  
+  sample_uni <- runif(n_ss, min = -3, max = 5)
+  
+  sample_uni_mean[i] <- mean(sample_uni)
+  
+}
+
+hist(sample_uni_mean, breaks = 50)
+qqnorm(sample_uni_mean)
+```
+

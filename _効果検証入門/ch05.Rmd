@@ -1,0 +1,250 @@
+---
+title: "Ch.05"
+output: html_document
+date: "2024-12-26"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(broom)
+
+
+library(rddtools)
+library(rdd)
+
+
+dir_dbx <- "C:/Users/d19008/dentsuDropbox Dropbox/Yuu TANAKA"
+dir_dat <- "work-place/000-data"
+dir_wk <- "book/効果検証入門"
+fname <- file.path(
+  dir_dbx,
+  dir_dat,
+  dir_wk,
+  "Kevin_Hillstrom_MineThatData_E-MailAnalytics_DataMiningChallenge_2008.03.20.csv"
+)
+
+
+email_data <- read_csv(fname)
+
+```
+
+介入を決定する変数のことをrunning variableといい、介入の有無の閾値のことをカットオフという
+
+
+
+```{r}
+# (3) ルールによるメールの配信を行ったログを作成
+## データの整形とrunning variableの追加
+male_data <- email_data %>%
+  filter(segment %in% c("Mens E-Mail","No E-Mail")) %>%
+  mutate(treatment = ifelse(segment == "Mens E-Mail", 1, 0),
+         history_log = log(history))
+
+## cut-off の値を指定
+threshold_value <- 5.5
+
+## ルールによる介入を再現したデータを作成
+## cut-offよりrunning variableが大きければが配信されたデータのみ残す
+## 逆の場合には配信されなかったデータのみ残す
+## running variableを0.1単位で区切ったグループわけの変数も追加しておく
+rdd_data <- male_data %>%
+  mutate(history_log_grp = round(history_log/0.1,0)*0.1) %>%
+  filter(((history_log > threshold_value) &
+            (segment == "Mens E-Mail")) |
+           (history_log <= threshold_value) &
+           (segment == "No E-Mail"))
+rdd_data
+
+```
+ここでは runnning variableをlog(history)とし、カットオフポイントを5.5とする
+
+```{r}
+# (4) RCTデータとRDDデータの傾向の比較
+## running variableとサイト来訪率のプロット(RCTデータ)
+male_data %>%
+  mutate(history_log_grp = round(history_log/0.1,0)*0.1) %>%
+  group_by(history_log_grp, segment) %>%
+  summarise(visit = mean(visit),
+            N = n()) %>%
+  filter(N > 10) %>%
+  ggplot(aes(y = visit,
+             x = history_log_grp,
+             shape = segment,
+             size = N)) +
+  geom_point() +
+  ylim(0,NA) +
+  theme_bw() +
+  xlab("log(history)") +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "bottom",
+        plot.margin = margin(1,2,1,1, "cm"))
+
+## running variableとサイト来訪率のプロット(RDDデータ)
+rdd_data %>%
+  group_by(history_log_grp, segment) %>%
+  summarise(visit = mean(visit),
+            N = n()) %>%
+  filter(N > 10) %>%
+  ggplot(aes(y = visit,
+             x = history_log_grp,
+             shape = segment,
+             size = N)) +
+  geom_point() +
+  geom_vline(xintercept = 5.5, linetype = 2) +
+  ylim(0,NA) +
+  theme_bw() +
+  xlab("log(history)") +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "bottom",
+        plot.margin = margin(1,2,1,1, "cm"))
+```
+
+
+```{r}
+# (5) 集計による分析
+## RCTデータでの比較
+rct_data_table <- male_data %>%
+  filter(history_log > 5, history_log < 6) %>%
+  group_by(treatment) %>%
+  summarise(count = n(),
+            visit = mean(visit))
+rct_data_table
+
+## RDDデータでの比較
+rdd_data_table <- rdd_data %>%
+  group_by(treatment) %>%
+  summarise(count = n(),
+            visit_rate = mean(visit))
+rdd_data_table
+```
+
+
+```{r}
+# (6) 回帰分析による分析
+## 線形回帰による分析
+rdd_lm_reg <- rdd_data %>%
+  mutate(treatment = ifelse(segment == "Mens E-Mail", 1, 0)) %>%
+  lm(data = ., formula = visit ~ treatment + history_log) %>%
+  summary() %>%
+  tidy() %>%
+  filter(term == "treatment")
+rdd_lm_reg
+```
+
+回帰分析における介入の効果は主に、介入グループと非介入グループの割合がちょうど1:1になっているような
+サンプルを中心に算出される
+
+カットオフ付近のデータだけが利用されていることになり、
+この状況によって推定される効果はカットオフ周辺の効果であり、
+=Local Average Treatment Effect (LATE)= と呼ばれる
+
+```{r}
+## 非線形回帰による分析
+nonlinear_rdd_data <- rdd_data(y = rdd_data$visit,
+                               x = rdd_data$history_log,
+                               cutpoint = 5.5)
+nonlinear_rdd_data
+```
+
+
+```{r}
+nonlinear_rdd_ord4 <- rdd_reg_lm(rdd_object = nonlinear_rdd_data, order=4)
+nonlinear_rdd_ord4
+plot(nonlinear_rdd_ord4)
+plot(nonlinear_rdd_ord4, binwidth = 1)
+plot(nonlinear_rdd_ord4, binwidth = 2)
+```
+RDプロット: 散布図の横軸をいくつかのビン (bin) に分割して、そのビンの中に入る Y
+の平均値をドットで示した図
+
+
+
+```{r}
+# (7) 分析に使うデータの幅と分析結果のプロット
+bound_list <- 2:100/100
+result_data <- data.frame()
+for(bound in bound_list){
+  out_data <- rdd_data %>%
+    filter(between(history_log, 5.5 - bound, 5.5 + bound)) %>%
+    group_by(treatment) %>%
+    summarise(count = n(),
+              visit_rate = mean(visit),
+              sd = sd(visit))
+
+  late <- out_data$visit_rate[2] - out_data$visit_rate[1]
+  N <- sum(out_data$count)
+  se <- sqrt(sum(out_data$visit_rate^2))/sqrt(N)
+  result_data <- rbind(result_data, data.frame(late, bound, N, se))
+}
+result_data %>%
+  ggplot(aes(y = late,
+             x = bound)) +
+  geom_ribbon(aes(ymax = late + 1.96*se,
+                  ymin = late - 1.96*se), fill = "grey70") +
+  geom_line() +
+  theme_bw()
+```
+縦軸は集計による効果の差を示し、横軸は推定に使うデータの範囲をしめす、
+バンド幅が狭いほどセレクションバイアスが小さいと考えれるが、標準誤差は大きくなり、
+推定される効果の値も大きく変動することが分かる
+
+
+```{r}
+# (8) nonparametric RDD
+## ライブラリの読み込み
+
+## non-parametric RDDの実行
+rdd_result <- RDestimate(data = rdd_data,
+                         formula = visit ~ history_log,
+                         cutpoint = 5.5)
+
+## 結果のレポート
+summary(rdd_result)
+```
+ノンパラメトリックRDDでは結果変数を割当変数（処置変数ではない）に回帰するformulaにする
+つまり、割り当て変数であるhistory_logを説明変数にするのみである
+
+この結果から、
+LATEの推定値が7%程度サイト来訪率の向上に寄与することが示されている
+Half-BWとDouble-BWはデータの幅を半分と倍にした場合の結果を示す。
+
+ここではおおまかではあるが、LATEとHalf-BWの推定値が同一であることから、
+通常のデータ幅でうまくバイアスが少なくなっている状況が得られている
+
+
+```{r}
+## 結果のプロット
+plot(rdd_result)
+```
+
+RDDでは、
+Continuity of Conditional Regression FUnctionsと呼ばれる仮定を見ている必要がある
+これは、
+介入を受けた場合と受けなかった場合の条件付き期待値である$E[Y^{(0)} \mid X]$と$E[Y^{(1)} \mid X]$が
+Xに対して連続であることを仮定すること
+
+別の介入がある時、これらが連続でない状況が発生する
+
+また、RDDにおいては、分析対象者が自分で介入ステータスを調整できないという
+non-manuplationと呼ばれる仮定が必要
+
+カットオフ付近の分布が大きく変化しているかどうかで判別することができ、
+関数~DCdensity()~を使う
+
+```{r}
+## manipulation
+DCdensity(runvar = rdd_data %>% pull(history_log),
+          cutpoint = 5.5,
+          plot = FALSE)
+
+DCdensity(runvar = rdd_data %>% pull(history_log),
+          cutpoint = 5.5,
+          plot = TRUE)
+```
+
+0.63というP値が用意されているため、ユーザーが自分の意志で介入グループに入るような状況は起きていない
+ということ分かる。
+有意な結果が得られた場合は、このデータで推定される効果にはユーザーの選択による
+バイアスが含まれる

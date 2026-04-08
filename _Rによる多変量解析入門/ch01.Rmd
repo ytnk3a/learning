@@ -1,0 +1,495 @@
+---
+title: "Ch.01"
+output: html_document
+date: "2023-08-08"
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+-\> メモ
+<https://scrapbox.io/r-code/R%E3%81%AB%E3%82%88%E3%82%8B%E5%A4%9A%E5%A4%89%E9%87%8F%E8%A7%A3%E6%9E%90%E5%85%A5%E9%96%80>
+
+```{r}
+
+boxplot(count ~ spray, data = InsectSprays, notch = FALSE, col = "lightgray", horizontal = TRUE)
+```
+
+# t検定
+
+2つの母集団からの値の平均の差が統計的にあるかを推測したい場合、独立な2群のt検定を利用する。
+t検定は2つの母集団の等分散性を仮定しているので、事前に等分散性に関するF検定を行う必要がある
+
+## 等分散性に関するF検定
+
+この検定は帰無仮説が - 2群の母分散は等しい
+
+であるため、棄却しない方が望ましい
+
+```{r}
+var.test(extra ~ group, data = sleep)
+```
+
+p値が0.74ということから、有意水準5%で帰無仮説は棄却できないため、
+**この2つの集団は等分散が成り立っていないという積極的な証拠が見られない**
+ため、 等分散を仮定したt検定へとうつる
+
+## 独立な2群のt検定（等分散性を仮定）
+
+```{r}
+t.test(extra ~ group, data = sleep, var.equal = TRUE)
+```
+
+p値0.07より、有意水準5%では帰無仮説を棄却できない結果となった
+
+また、等分散性が成り立たない場合はWelchのt検定を用いればよく、
+その場合は `var.equal =  FALSE` とすればRでは実装が可能
+
+> 95 percent confidence interval: -3.363874 0.203874
+
+このインターバルとしては何を表しているのか？
+
+```{r}
+t.test(extra ~ group, data = sleep, var.equal = FALSE)
+
+```
+
+## 対応のあるt検定
+
+```{r}
+sleep2 <- reshape(sleep, direction = "wide", 
+                  idvar = "ID", timevar = "group")
+sleep2
+t.test(Pair(extra.1, extra.2) ~ 1, data = sleep2)
+```
+
+```{r}
+agent1 <- sleep[1:10,1]
+agent2 <- sleep[11:20,1]
+t.test(x = agent1, y = agent2, paired = T)
+```
+
+## 母平均の信頼区間の描画
+
+`gplots::plotmean()`
+で群別に母平均の95%の信頼区間をプロットすることができる。
+t分布に基づく信頼区間を描画する関数
+
+```{r}
+library(gplots)
+
+plotmeans(extra ~ group,  data = sleep, p = 0.95)
+t.test(sleep$extra[sleep$group == 1])
+t.test(sleep$extra[sleep$group == 2])
+```
+
+```{r, fig.width=12}
+data(esoph)
+par(
+  las = 2,                        # use perpendicular axis labels
+  mar = c(10.1, 4.1, 4.1, 2.1),      # create enough space for long x labels
+  mgp = c(8, 1, 0)                  # move x axis legend down to avoid overlap
+)
+plotmeans(
+  ncases/ncontrols ~ interaction(agegp , alcgp, sep ="   "),
+  connect  = list(1:6, 7:12, 13:18, 19:24),
+  barwidth = 2,
+  col  = "dark green",
+  data = esoph,
+  xlab = "Age Group and Alcohol Consumption",
+  ylab = "# Cases / # Controls",
+  ylim = c(-2, 10),
+  main = c(
+    "Fraction of Cases for by Age and Alcohol Consumption",
+    "Ile-et-Vilaine Esophageal Cancer Study")
+)
+```
+
+# 相関係数の検定
+
+```{r}
+library(psych)
+ct <- corr.test(attitude)  #find the correlations and give the probabilities
+ct #show the results
+```
+
+## 1.5.2 連関の分析
+
+```{r}
+
+# 3重クロス
+xtabs(ncases ~ agegp + alcgp + tobgp, data = esoph)
+
+# 目的変数が複数であっても対応可能
+xtabs(cbind(ncases, ncontrols) ~ ., data = esoph)
+
+# アウトプットを見やすくる
+ftable(xtabs(cbind(ncases, ncontrols) ~ ., data = esoph))
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## クラメールの連関係数
+
+```{r}
+library(vcd)
+
+data("Arthritis")
+tab <- xtabs(~Improved + Treatment, data = Arthritis)
+
+tab
+
+summary(assocstats(tab))
+
+assocstats(tab)$cramer
+```
+
+Cramer's V: 0.394 より一定の連関があるということが示唆できる
+
+2 x 2クロスの時は phi coeffを用いるが、 n x mクロスの時はcramer's
+vを用いる [\^1]
+
+クラメールV係数は下記の利点を有する - 0 \~
+1の範囲をとり、1に近いほど2つの変数に連関の度合が強いと言えるので、相関係数のように直観的にわかりやすい -
+$\chi^2$と異なり、サンプルサイズの影響は受けない
+
+Contingency Coeff.: ピアソンの一致性係数 - phi: The absolute value of
+the phi coefficient (only defined for 2 \times 22×2 tables). - cont: The
+contingency coefficient. - cramer: Cramer's V.
+
+- ピアソンの連関係数
+$$
+C=\sqrt{\frac{\chi^2}{N + \chi^2}}
+$$
+
+- クラメールの連関係数
+$$
+V = \sqrt{\frac{ \chi^2 }{ (\min (R, C) \times N) }}
+$$
+R, C: 行数, 列数
+
+
+## $\chi^2$ 検定と残差分析
+
+```{r}
+res_csq <- chisq.test(tab)
+res_csq
+
+cat("residuals\n")
+res_csq$residuals # the Pearson residuals, (observed - expected) / sqrt(expected).
+cat("stdres\n")
+res_csq$stdres # standardized residuals, (observed - expected) / sqrt(V), where V is the residual cell variance
+```
+クロス集計の連関の有無を見るのが、$\chi^2$検定
+独立したクロス集計をみて、どのセルが有意な逸脱があるかを検討するために残差分析を行う。
+Rだとオブジェクト `stdres`に標準化された残差が格納されている
+絶対値が1.96以上あれば、そのセルに5%水準で有意な逸脱があったと見れる
+
+# 偏相関係数
+
+```{r}
+library(psych)
+
+jen <- make.hierarchical()    #make up a correlation matrix 
+lowerMat(jen[1:5,1:5])
+partial.r(jen, c(1, 3, 5), c(2, 4))
+lowerMat(par.r)
+```
+
+
+V1とV3の相関係数は0.48だが、V2とV4の統制変数の影響を除去すると偏相関係数は0.29となった。
+また、V1とV5, V3とV5も0.35 > 0.14 / 0.26 > 0.10 といずれも小さくなるという結果になった
+
+`partial.r(data, 偏相関係数をもとめたい変数, 影響を統制する変数)`
+# 順序カテゴリカル変数の相関係数
+
+- ポリコリック相関係数
+  - テトラコリック相関係数
+- ポリシリアル相関係数
+  - バイシリアル相関係数
+
+```{r}
+z <- stats::rnorm(100)
+
+break_lab <- c(-Inf, summary(z)[c(2, 5)], Inf)
+break_lab
+
+z_cut <- cut(z, breaks = break_lab, right = FALSE, labels = c(0, 1, 2))
+head(data.frame(
+  z     = z,
+  z_cut = z_cut
+))
+```
+  
+```{r}
+library(polycor)
+
+data <-  data.frame(
+  w = c(6,7,2,5,6,3,3,4,1,2),
+  x = c(1,2,3,6,1,4,3,4,7,2),
+  y = as.factor(c(3,3,1,1,2,2,2,1,2,2)),
+  z = as.factor(c(2,3,2,1,1,2,1,1,3,2))
+  )
+
+hetcor(data)
+# ans
+```
+
+
+# 効果量
+
+- 効果量とは，データの単位に依存しない標準化された効果の程度を表す指標
+- P値はその値より極端な値をとる確率を示したものに過ぎないため、その実験において実際にどの程度の効果があったかを知ることはできません
+
+
+## 独立な2群のt検定における効果量
+
+独立な2群のt検定の検定統計量 $t$ は
+$$
+t = d \sqrt{\frac{n_1n_2}{n_1 + n_2}}
+$$
+
+と表され、標本効果量$d$と、各群の標本サイズ $(n_1, n_2)$で構成される部分の積である
+
+また、
+$$
+d = \frac{\bar{x}_1 - \bar{x}_2}{s^*},  s^* = \sqrt{\frac{n_1s_q^2 + n_2s_2^2}{n_1+n_2-2}}
+$$
+
+dは母集団における効果量の推定量の1つだが、不偏推定量ではない
+不偏推定量としては修正済みのgという効果量を利用することができる。
+またdに関しては標本標準化平均偏差 / Cohenのd / Hedgesのdという呼び名もある
+
+```{r}
+
+# t.test(extra ~ group, data = sleep, var.equal = TRUE)
+
+effect_d1 <- function(x1, x2, clevel = 0.95) {
+  library(MBESS)
+  
+  # sample size
+  n1 <- length(x1)
+  n2 <- length(x2)
+  
+  # sample mean
+  m1 <- mean(x1)
+  m2 <- mean(x2)
+  
+  # sample sd
+  s1 <- sqrt(mean((x1 - m1)^2))
+  s2 <- sqrt(mean((x2 - m2)^2))
+  
+  # 母標準偏差の推定値の算出
+  sast <- sqrt(((n1 * s1^2) + (n2 * s2^2)) / (n1 + n2 - 2))
+  
+  # 効果量の算出
+  d <- (m1 - m2) / sast
+  
+  # t-test
+  # browser()
+  res_t <- t.test(x1, x2, paired = FALSE, var.equal = TRUE)
+  
+  #
+  res_conf <- conf.limits.nct(
+    t.value = res_t$statistic,
+    df = res_t$parameter,
+    conf.level = clevel
+  )
+
+  l1 <- res_conf$Lower.Limit * sqrt((n1 + n2) / (n1 * n2))  
+  u1 <- res_conf$Upper.Limit * sqrt((n1 + n2) / (n1 * n2))  
+  
+  u3 <- pnorm(d, 0, 1)
+  
+  return(list(
+    d = d,
+    clevel = clevel,
+    ci_low = l1,
+    ci_upp = u1,
+    u3 = u3
+    
+  ))
+  
+}
+
+sleep_1 <- sleep$extra[sleep$group == 1]
+sleep_2 <- sleep$extra[sleep$group == 2]
+
+effect_d1(sleep_1, sleep_2, clevel = 0.95)
+
+```
+
+
+
+## 対応のあるt検定における効果量
+
+$$
+t = d'\sqrt{n}, d' = \frac{\bar{v}}{s'_v}
+$$
+```{r}
+effect_d2 <- function(x1, x2, clevel = 0.95) {
+  library(MBESS)
+  
+  # sample size
+  n <- length(x1 - x2)
+  
+  # sample mean
+  v_bar <- mean(x1 - x2)
+  
+  # sample sd
+  sv_p <- sd(x1 - x2)
+  
+  # 効果量の算出
+  d <- v_bar / sv_p
+  
+  # t-test
+  # browser()
+  res_t <- t.test(x1, x2, paired = TRUE, var.equal = TRUE)
+  
+  #
+  res_conf <- conf.limits.nct(
+    t.value = res_t$statistic,
+    df = res_t$parameter,
+    conf.level = clevel
+  )
+
+  l1 <- res_conf$Lower.Limit * sqrt(n)
+  u1 <- res_conf$Upper.Limit * sqrt(n)
+  
+  u3 <- pnorm(d, 0, 1)
+  
+  return(list(
+    d = d,
+    clevel = clevel,
+    ci_low = l1,
+    ci_upp = u1,
+    u3 = u3
+    
+  ))
+  
+}
+
+sleep_1 <- sleep$extra[sleep$group == 1]
+sleep_2 <- sleep$extra[sleep$group == 2]
+
+effect_d2(sleep_1, sleep_2, clevel = 0.95)
+```
+
+
+
+## その他の効果量と信頼区間
+```{r}
+ct <- corr.test(attitude) 
+print(ct, short = FALSE)
+```
+
+## クラメールの連関係数Vの信頼区間
+```{r}
+
+effect_v <- function(tmpcross, clevel = 0.95) {
+  library(vcd)
+  library(MBESS)
+  
+  # tmpcross <- table(x, y)
+  
+  n <- sum(tmpcross)
+  
+  size <- dim(tmpcross)
+  
+  dof <- prod(size - 1)
+  
+  res_as <- assocstats(tmpcross)
+  
+  chi <- res_as$chisq_tests["Pearson", "X^2"]
+  
+  v <- res_as$cramer
+  
+  res_conf <- conf.limits.nc.chisq(Chi.Square = chi, df = dof, conf.level = clevel)
+  
+  if(res_conf$Lower.Limit > 0) {
+    l1 <- sqrt(
+      (dof + res_conf$Lower.Limit) / ((min(size) - 1) * n)
+    )
+    
+    u1 <- sqrt(
+      (dof + res_conf$Upper.Limit) / ((min(size) - 1) * n)
+    )
+    
+    return(list(
+      v = v,
+      chi_2 = chi,
+      clevel = clevel,
+      ci_low = l1,
+      ci_upp = u1
+    ))
+    
+  } else if(res_conf$Lower.Limit == 0) {
+    
+    res_conf <- conf.limits.nc.chisq(
+      Chi.Square = chi, 
+      df = dof, 
+      conf.level = NULL, 
+      alpha.lower = 0, 
+      alpha.upper = (1 - clevel) / 2
+      )
+    
+
+    u1 <- sqrt(
+      (dof + res_conf$Upper.Limit) / ((min(size) - 1) * n)
+    )
+    
+    return(list(
+      "下限値が負の値になったので、信頼区間の下限値を0にしました",
+      v = v,
+      chi_2 = chi,
+      clevel = clevel,
+      ci_low = 0,
+      ci_upp = u1
+    ))
+    
+  }
+}
+
+
+data("Arthritis")
+tab <- xtabs(~Improved + Treatment, data = Arthritis)
+
+effect_v(tab)
+
+```
+
+- 参考文献
+\[^1]:[大量のカテゴリ変数から変数間の連関度を表すクラメールV指標を計算し、...](https://qiita.com/ytakeda/items/058e83ebdd721f87ceb4)
+
+\[^2]:[効果量　effect size - 一般社団法人 日本理学療法学会連合](https://www.jspt.or.jp/ebpt_glossary/effect-size.html)
+
+\[^3]:[31-2. 効果量1 | 統計学の時間 | 統計WEB](https://bellcurve.jp/statistics/course/12752.html)
+
+\[^4]:[cran/MBESS:](https://github.com/cran/MBESS)
+
+\[^5]:[MBESS](https://www3.nd.edu/~kkelley/site/MBESS.html)

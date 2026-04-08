@@ -1,0 +1,444 @@
+---
+title: "時間遅れをもつ微分方程式の数値計算の実装"
+format: html
+---
+
+```{r}
+rm(list = ls(all = TRUE))
+library(tidyverse)
+library(ggplot2)
+# library(patchwork)
+library(deSolve)
+```
+## 準備: 基本的な遅れ微分方程式に関して
+
+$$
+\begin{cases}
+\dfrac{dy(t)}{dt} = -y(t - 1), \\
+y(t) = 1, \quad t < 0.
+\end{cases}
+$$
+
+```{r}
+## =============================================================================
+## A simple delay differential equation
+## dy(t) = -y(t-tau) ; y(t<0)=1
+## =============================================================================
+
+derivs <- function(t, y, parms, tau) {
+  if (t < tau)
+    dy <- -1
+  else
+    dy <- - lagvalue(t - tau)
+  list(c(dy))
+}
+
+## initial values and times
+yinit <- 1
+times <- seq(0, 30, 0.1)
+
+yout <- dede(y = yinit, times = times, func = derivs, parms = NULL, tau = 1)
+plot(yout, type = "l", lwd = 2, main = "dy/dt = -y(t-tau)", ylim = c(-1, 1))
+
+tau_set <- c(0.2, 0.6, 1.5)
+col_set <- c("red", "tomato", "blue")
+
+for (i in seq_along(tau_set)) {
+  yout <- dede(y = yinit, times = times, func = derivs, parms = NULL, tau = tau_set[i])
+  lines(yout, type = "l", lwd = 2, col = col_set[i])
+}
+legend(
+  "topright",
+  legend = paste0("tau = ", c(1, tau_set)),
+  col = c("black", col_set),
+  lwd = 2
+)
+
+yout <- dede(y = yinit, times = times, func = derivs, parms = NULL, tau = 2)
+plot(yout, type = "l", lwd = 2, main = "dy/dt = -y(t-2)")
+```
+
+- `lagvlaue()`の使い方
+`dede`関数と一緒に用いられ、状態変数の遅れ度合いを与える関数。
+状態の遅れの時はlagvalue()で、微分側の遅れの時はlagderive()
+```{r}
+
+```
+
+```{r}
+##-----------------------------
+## the derivative function
+##-----------------------------
+predprey <- function(t, y, parms) {
+  tlag <- t - 1
+  if (tlag < 0)
+    ylag <- c(80, 30)
+  else 
+    ylag <- lagvalue(tlag)  # returns a vector
+  
+  dy1 <- a * y[1] * (1 - y[1]/m) + b * y[1] * y[2]
+  dy2 <- c * y[2] + d * ylag[1] * ylag[2]
+  list(c(dy1, dy2))
+}
+
+##-----------------------------
+## parameters
+##-----------------------------
+
+a <- 0.25; b <- -0.01; c <- -1 ; d <- 0.01; m <- 200
+
+##-----------------------------
+## initial values and times
+##-----------------------------
+
+yinit <- c(y1 = 80, y2 = 30)
+times <- seq(0, 100, by = 0.01)
+
+#-----------------------------
+# solve the model  
+#-----------------------------
+
+yout <- dede(y = yinit, times = times, func = predprey, parms = NULL)
+
+##-----------------------------
+## display, plot results
+##-----------------------------
+
+plot(yout, type = "l", lwd = 2, main = "Predator-prey model")
+plot(yout, type = "l", lwd = 2, main = "Predator-prey model", mfrow = c(2, 2))
+plot(yout[,2], yout[,3], xlab = "y1", ylab = "y2", type = "l", lwd = 2)
+
+diagnostics(yout)
+```
+
+
+- `lagvalue(t, nr)`
+A neutral delay differential equation (lagged derivative)   
+y't = -y'(t-1), y(t) t < 0 = 1/t
+
+:nr	
+the number of the lagged value; if NULL then all state variables or derivatives are returned.
+
+```{r}
+##-----------------------------
+## the derivative function
+##-----------------------------
+derivs <- function(t, y, parms) {
+  tlag <- t - 1
+  if (tlag < 0)
+    dylag <- -1
+  else
+    dylag <- lagderiv(tlag)
+
+  list(c(dy = -dylag), dylag = dylag)
+}
+
+##-----------------------------
+## initial values and times
+##-----------------------------
+
+yinit <- 0
+times <- seq(0, 4, 0.001)
+
+##-----------------------------
+## solve the model  
+##-----------------------------
+
+yout <- dede(y = yinit, times = times, func = derivs, parms = NULL)
+
+##-----------------------------
+## display, plot results
+##-----------------------------
+
+plot(yout, type = "l", lwd = 2)
+```
+
+
+
+## 固定遅れをもつ常微分方程式 e.q 4.6
+
+$$
+\frac{d T(t)}{dt} = - \beta T(t) V(t) \\
+\frac{d I(t)}{dt} = \beta T(t - \tau) V(t - \tau) - \delta I(t) \\
+\frac{d V(t)}{dt} = p I(t) - c V(t)
+$$
+
+```{r}
+## 計算する時刻の設定
+Tmin <- 0.0
+Tmax <- 30.0
+step_size <- 0.01
+
+## パラメータの設定
+## 1. lambda, d, beta, delta, p, c, T(0), I(0), V(0)
+pars1 <- c(1.0*(10.0^-10.0),  #beta
+           0.5,               #delta
+           3.0*(10.0^4.0),    #p
+           2.0,               #c
+           2.0,               #tau
+           6.46*(10.0^6.0),   #T(0)
+           10.0^-1.0,         #I(0)
+           5.0*(10.0^4.0))    #V(0)
+```
+
+```{r}
+dde_derives <- function(t, y, parms) {
+    
+    beta <- parms[1]
+    delta <- parms[2]
+    p <- parms[3]
+    c <- parms[4]
+    tau <- parms[5]
+    
+    if (t < tau) {
+        TClag <- parms[6]
+        VLlag <- parms[8]
+    } else {
+        TClag <- lagvalue(t - 1, 1)
+        VLlag <- lagvalue(t - 1, 3)
+    }
+    
+    dTdt <- - beta * y[1] * y[3]
+    dIdt <- beta * TClag * VLlag - delta * y[2]
+    dVdt <- p * y[2] - c * y[3]
+    
+    return(list(c(dTdt, dIdt, dVdt)))
+    
+}
+
+DDEs <- function(parms) {
+    pars <- parms[1:8]
+
+    ## 計算のタイムステップ
+    t_list <- seq(Tmin, Tmax, by = step_size)
+    ## 初期値 I(0), V(0)
+    var_init <- c(TC = parms[6], IC = parms[7], VL = parms[8])
+    ## 微分方程式の計算
+    out <- dede(y = var_init, times = t_list, func = dde_derives, parms = pars)
+    
+    as.data.frame(out)
+}
+```
+
+```{r}
+out1 <- DDEs(pars1)
+p1 <- ggplot(data = out1, aes(x = time, y = log10(TC))) +
+    geom_line() +
+    xlab("Time") +
+    ylab("Target cells (log10)")
+
+p2 <- ggplot(data = out1, aes(x = time, y = log10(IC))) +
+    geom_line() +
+    xlab("Time") +
+    ylab("Infected cells (log10)")
+
+p3 <- ggplot(data = out1, aes(x = time, y = log10(VL))) +
+    geom_line() +
+    xlab("Time") +
+    ylab("Viral load (log10)")
+p1
+p2
+p3
+
+p1 <- ggplot(data = out1, aes(x = time, y = TC)) +
+    geom_line() +
+    xlab("Time") +
+    ylab("Target cells (log10)")
+
+p2 <- ggplot(data = out1, aes(x = time, y = IC)) +
+    geom_line() +
+    xlab("Time") +
+    ylab("Infected cells (log10)")
+
+p3 <- ggplot(data = out1, aes(x = time, y = VL)) +
+    geom_line() +
+    xlab("Time") +
+    ylab("Viral load (log10)")
+
+p1
+p2
+p3
+```
+
+- f(a)が指数分布の場合
+
+```{r}
+## 計算する時刻の設定
+Tmin <- 0.0
+Tmax <- 30.0
+step_size <- 0.01
+
+## beta, delta, p, c, k, T(0), I(0), V(0)
+pars2 <- c(1.0*(10.0^-10.0), #beta
+           0.5,               #delta
+           3.0*(10.0^4.0),    #p
+           2.0,               #c
+           1/2.0,             #k
+           6.46*(10.0^6.0),   #T(0)
+           (10.0^-1.0),       #E(0)
+           (10.0^-1.0),       #I(0)
+           5.0*(10.0^4.0))   #V(0)
+
+ode_derives <- function(t, var, pars) {
+    with(as.list(c(var, pars)), {
+        dTdt <- - beta * TC * VL
+        dEdt <- beta * TC * VL - k * EC
+        dIdt <- k * EC - delta * IC
+        dVdt <- p * IC - c * VL
+        
+        return(list(c(dTdt, dEdt, dIdt, dVdt)))
+    })
+}
+
+ODEs <- function(parms) {
+    pars <- parms[1:5]
+    names(pars) <- c("beta", "delta", "p", "c", "k")
+    
+    ## 計算のタイムステップ
+    t_list <- seq(Tmin, Tmax, by = step_size)
+    ## 初期値 I(0), V(0)
+    var_init <- c(TC = parms[6], EC = parms[7], IC = parms[8], VL = parms[9])
+    ## 微分方程式の計算
+    out <- ode(y = var_init, times = t_list, func = ode_derives, parms = pars)
+    
+    as.data.frame(out)
+}
+
+out2 <- ODEs(pars2)
+
+p1 <- ggplot(data = out2, aes(x = time, y = log10(TC))) +
+    geom_line() +
+    xlab("Time") +
+    ylab("Target cells (log10)")
+
+p2 <- ggplot(data = out2, aes(x = time, y = log10(EC))) +
+    geom_line() +
+    xlab("Time") +
+    ylab("Cells in eclipse phase (log10)")
+
+p3 <- ggplot(data = out2, aes(x = time, y = log10(IC))) +
+    geom_line() +
+    xlab("Time") +
+    ylab("Infected cells (log10)")
+
+p4 <- ggplot(data = out2, aes(x = time, y = log10(VL))) +
+    geom_line() +
+    xlab("Time") +
+    ylab("Viral load (log10)")
+
+p1
+p2
+p3
+p4
+
+```
+
+
+- f(a)がアーラン分布の場合
+```{r}
+## 計算する時刻の設定
+Tmin <- 0.0
+Tmax <- 30.0
+step_size <- 0.01
+
+## beta, delta, p, c, k, T(0), I(0), V(0)
+pars3 <- c(1.0*(10.0^-10.0),  #beta
+           0.5,               #delta
+           3.0*(10.0^4.0),    #p
+           2.0,               #c
+           3.0,               #n_E
+           0.98,              #tau_E
+           6.46*(10.0^6.0),   #T(0)
+           (10.0^-1.0),       #E_1(0)
+           (10.0^-1.0),       #E_2(0)
+           (10.0^-1.0),       #E_3(0)
+           (10.0^-1.0),       #I(0)
+           5.0*(10.0^4.0))   #V(0)
+
+ode_derives <- function(t, var, pars) {
+    with(as.list(c(var, pars)), {
+        dTdt <- - beta * TC * VL
+        dE1dt <- beta * TC * VL - (n_E/tau_E) * EC1
+        dE2dt <- (n_E/tau_E) * (EC1 - EC2)
+        dE3dt <- (n_E/tau_E) * (EC2 - EC3)
+        dIdt <- (n_E/tau_E) * EC3 - delta * IC
+        dVdt <- p * IC - c * VL
+        
+        return(list(c(dTdt, dE1dt, dE2dt, dE3dt, dIdt, dVdt)))
+    })
+}
+
+ODEs <- function(parms) {
+    pars <- parms[1:6]
+    names(pars) <- c("beta", "delta", "p", "c", "n_E", "tau_E")
+    
+    ## 計算のタイムステップ
+    t_list <- seq(Tmin, Tmax, by = step_size)
+    ## 初期値 I(0), V(0)
+    var_init <- c(TC = parms[7], EC1 = parms[8], EC2 = parms[9], EC3 = parms[10],
+                  IC = parms[11], VL = parms[12])
+    ## 微分方程式の計算
+    out <- ode(y = var_init, times = t_list, func = ode_derives, parms = pars)
+    
+    as.data.frame(out)
+}
+
+out3 <- ODEs(pars3)
+
+plt <- list()
+
+for (i in 1:6) {
+    
+    data_temp <- out3[, c("time", colnames(out3)[-1][i])]
+    colnames(data_temp) <- c("x", "y")
+    
+    ylabel <- c("Target cells (log10)", "E_1 (log10)", "E_2 (log10)",
+                "E_3 (log10)", "Infected cells (log10)", "Viral load (log10)")[i]
+    
+    plt[[i]] <- ggplot(data = data_temp, aes(x = x, y = log10(y))) +
+        geom_line() +
+        xlab("Time") +
+        ylab(ylabel)
+}
+
+
+plt
+```
+
+```{r}
+## 計算する時刻の設定
+Tmin <- 0.0
+Tmax <- 3.0
+step_size <- 0.01
+
+## beta, delta, p, c, k, T(0), I(0), V(0)
+pars4 <- c(1.0*(10.0^-10.0),  #beta
+           14.0,              #delta
+           3.26*(10.0^4.0),   #p
+           0.039,             #c
+           3.0,               #n_E
+           0.98,              #tau_E
+           0.0,               #T(0)
+           (10.0^6.0),        #E_1(0)
+           0.0,               #E_2(0)
+           0.0,               #E_3(0)
+           0.0,               #I(0)
+           1.29*(10.0^9.0))   #V(0)
+
+out4 <- data.frame()
+for (i in 1:2) {
+    pars4[2] <- c(1.75, 14.0)[i]
+    
+    out4 <- rbind(out4, cbind(ODEs(pars4), label = c("A", "B")[i]))
+}
+
+## 図4.6(c)
+ggplot(data = out4, aes(x = time, y = log10(VL), color = label)) +
+    geom_line() +
+    scale_color_manual(values = c(A = "blue", B = "black"), name = expression(delta), label = c(A = "1.75", B = "14.0")) +
+    scale_y_continuous(limits = c(8.6, 10.5)) +
+    xlab("Time") +
+    ylab("Viral load (log10)") +
+    theme()
+```
+

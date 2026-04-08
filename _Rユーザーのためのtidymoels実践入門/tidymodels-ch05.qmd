@@ -1,0 +1,275 @@
+---
+title: "Ch.05: ハイパーパラメータチューニング"
+format: html
+editor: source
+---
+
+## 5-1　ハイパーパラメータチューニングの流れ
+```{r}
+library(tidyverse)
+library(yardstick)
+library(tune)
+library(dials)
+library(parsnip)
+library(rsample)
+library(modeldata)
+library(workflows)
+library(recipes)
+```
+## 5-2　ハイパーパラメータチューニングの手法
+## 5-3　tuneパッケージによるハイパーパラメータチューニング
+```{r}
+set.seed(71)
+
+ames_raw <- ames
+split_ames_df <- initial_split(ames_raw, strata = "Sale_Price")
+ames_train <- training(split_ames_df)
+ames_test <- testing(split_ames_df)
+
+ames_cv_splits <- vfold_cv(
+  ames_train,
+  strata = "Sale_Price",
+  v = 10
+)
+
+ames_rec <- recipe(Sale_Price ~ ., data = ames_train) %>% 
+  step_log(Sale_Price, base = 10) %>% 
+  step_YeoJohnson(Lot_Area, Gr_Liv_Area) %>% 
+  step_other(Neighborhood, threshold = 0.1) %>% 
+  step_zv(all_predictors())
+
+ames_rf_cv <- workflow() %>% 
+  add_recipe(ames_rec) %>% 
+  add_model(
+    rand_forest(
+      mtry  = tune::tune(),
+      trees = tune::tune()
+    ) %>% 
+    set_engine(
+      "ranger",
+      num.threads = parallel::detectCores()
+      ) %>% 
+    set_mode("regression")
+  )
+```
+
+```{r}
+# library("dials", lib.loc = "C:/Users/d19008/AppData/Local/R/win-library/4.2/")
+
+rf_params <- list(
+  trees(),
+  mtry() %>% 
+    finalize(ames_rec %>% prep() %>% bake(new_data =NULL) %>% select(!Sale_Price))
+  ) %>% 
+  parameters()
+
+rf_params
+```
+```{r}
+rf_grid_range <- rf_params %>% 
+  grid_random(size = 5)
+
+rf_grid_range
+```
+```{r}
+ames_rf_grid <- ames_rf_cv %>% 
+  tune_grid(
+    resamples = ames_cv_splits,
+    grid = rf_grid_range,
+    control = control_grid(save_pred = TRUE),
+    metrics = metric_set(rmse)
+  )
+
+autoplot(ames_rf_grid)
+```
+
+```{r}
+ames_rf_grid_best <- ames_rf_grid %>% 
+  show_best()
+
+ames_rf_grid_best
+```
+
+```{r}
+ames_rf_model_best <- rand_forest(
+  trees = ames_rf_grid_best$trees[1],
+  mtry  = ames_rf_grid_best$mtry[1]
+) %>% 
+  set_engine("ranger", seed = 71) %>% 
+  set_mode("regression")
+
+ames_rf_cv_last <- ames_rf_cv %>% 
+  update_model(ames_rf_model_best)
+```
+
+```{r}
+ames_rf_last_fit <- ames_rf_cv_last %>% 
+  last_fit(split_ames_df)
+
+last_rmse <- ames_rf_last_fit %>% 
+  collect_metrics()
+
+last_rmse
+```
+
+```{r}
+ames_rf_bayes <- ames_rf_cv %>% 
+  tune_bayes(
+    resamples = ames_cv_splits,
+    param_info = rf_params,
+    initial = 5,
+    iter    = 5,
+    metrics = metric_set(rmse)
+  )
+
+ames_rf_bayes_best <- ames_rf_bayes %>% 
+  show_best()
+
+ames_rf_bayes_best
+
+ames_rf_model_best_bayes <- rand_forest(
+  trees = ames_rf_bayes_best$trees[1],
+  mtry  = ames_rf_bayes_best$mtry[1]
+  ) %>% 
+  set_engine("ranger", seed = 71) %>% 
+  set_mode("regression")
+
+
+ames_rf_cv_last <- ames_rf_cv %>% 
+  update_model(ames_rf_model_best_bayes)
+
+ames_rf_last_fit <- ames_rf_cv_last %>% 
+  last_fit(split_ames_df)
+
+last_rmse_bayes <- ames_rf_last_fit %>% 
+  collect_metrics()
+
+last_rmse_bayes
+
+```
+grid  search rmse: 0.0549 rsq: 0.905
+bayes search rmse: 0.0545 rsq: 0.907 < 
+
+# Memo Ch.05
+代表的なハイパーパラメーターチューニングとして3つ
+- グリッドサーチ
+- ランダムサーチ
+- ベイズ最適化
+  初期点をいくつか与え、その初期点から得られるモデルの精度を関数化する。その関数の形状から
+  どこがもっとも精度が高くなりそうかを表現し、そこを重点的に探索する方法。初期点の数が多くなれば、
+  その分関数の同定が可能となる。また探索点においても、点が密集しておらず探索があまりしていない部分と、
+  精度が良さそうなところのバランスを取りながら、探索を行う
+  バランスのとり方にも方法がいくつかあり
+  1. PI (Probability of Improvement: 改善確率) -> 現在の最高値を超える確率が高いところを探索。局所解の可能性もある
+  2. EI (Expected Improvement: 期待改善量) -> 評価値と最高値の差の期待が最も高くなるところを探索。tune_bayes()のデフォルト
+  3. UCB (Uppder Confidence Bound: 上限信頼限界) -> 評価値の信頼区間の上限が最も高い点を次に探索
+  ハイパーパラメータx精度の関数においては、ガウス過程を用いる
+  - 
+
+-
+<1>. `workflow()`内のパラメーター設定の部分を`tune::tune()`とすることで、ワークフロー内でチューニングが可能となる
+<2>. グリッドサーチの初期点を与え、`tune_grid(grid=)`で指定しチューニング
+グリッドサーチでは他下記のような関数がある
+- `grid_regular()`: 等間隔のグリッド作成
+- `grid_random()` :ランダムサーチ
+- `grid_max_entropy()`: ハイパーパラメータ空間全体をカバーし、エントロピーが最大になるようグリッドを作成
+- `grid_latin_hypercube()`: パラメータ空間全体から、少ないサンプリングで空間を均一にカバーするようグリッドを作成
+<3>. ベイズ最適化では、`tune_bayes(initial)` で何点からチューニングするかを設定, また獲得関数の精度を`metrics`で設定
+
+
+```{r summary-code, eval=FALSE}
+# - data set
+set.seed(71)
+
+ames_raw <- ames
+split_ames_df <- initial_split(ames_raw, strata = "Sale_Price")
+ames_train <- training(split_ames_df)
+ames_test <- testing(split_ames_df)
+
+ames_cv_splits <- vfold_cv(
+  ames_train,
+  strata = "Sale_Price",
+  v = 10
+)
+
+ames_rec <- recipe(Sale_Price ~ ., data = ames_train) %>% 
+  step_log(Sale_Price, base = 10) %>% 
+  step_YeoJohnson(Lot_Area, Gr_Liv_Area) %>% 
+  step_other(Neighborhood, threshold = 0.1) %>% 
+  step_zv(all_predictors())
+
+ames_rf_cv <- workflow() %>% 
+  add_recipe(ames_rec) %>% 
+  add_model(
+    rand_forest(
+      mtry  = tune::tune(),# <1> 
+      trees = tune::tune() # <1>
+    ) %>% 
+    set_engine(
+      "ranger",
+      num.threads = parallel::detectCores()
+      ) %>% 
+    set_mode("regression")
+  )
+
+# - parameter set 
+rf_params <- list(
+  trees(),
+  mtry() %>% 
+    finalize(ames_rec %>% prep() %>% bake(new_data =NULL) %>% select(!Sale_Price))
+  ) %>% 
+  parameters()
+
+# - grid search
+rf_grid_range <- rf_params %>% # <2> 
+  grid_random(size = 5)        # <2>
+
+ames_rf_grid <- ames_rf_cv %>% 
+  tune_grid( # <2>
+    resamples = ames_cv_splits,
+    grid = rf_grid_range,
+    control = control_grid(save_pred = TRUE),
+    metrics = metric_set(rmse)
+  )
+
+autoplot(ames_rf_grid)
+
+# - check bast case
+ames_rf_grid_best <- ames_rf_grid %>% 
+  show_best()
+
+ames_rf_model_best <- rand_forest(
+  trees = ames_rf_grid_best$trees[1],
+  mtry  = ames_rf_grid_best$mtry[1]
+  ) %>% 
+  set_engine("ranger", seed = 71) %>% 
+  set_mode("regression")
+
+ames_rf_cv_last <- ames_rf_cv %>% 
+  update_model(ames_rf_model_best)
+
+ames_rf_last_fit <- ames_rf_cv_last %>% 
+  last_fit(split_ames_df)
+
+last_rmse <- ames_last_fit %>% 
+  collect_metrics()
+
+last_rmse
+```
+
+```{r summary-code, eval=FALSE}
+ames_rf_bayes <- ames_rf_cv %>% 
+  tune_bayes( # <3>
+    resamples = ames_cv_splits,
+    param_info = rf_params,
+    initial = 5,
+    iter    = 5,
+    metrics = metric_set(rmse)
+  )
+
+ames_rf_bayes_best <- ames_rf_bayes %>% 
+  show_best()
+
+ames_rf_bayes_best
+```
+

@@ -1,0 +1,160 @@
+---
+title: "Ch.09 クラスター分析"
+output: html_document
+date: "2023-12-23"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+seiseki <- matrix(c(
+  89, 90, 67, 46, 50, 57, 70, 80, 85, 90,
+  80, 90, 35, 40, 50, 40, 60, 50, 45, 55,
+  78, 85, 45, 55, 60, 55, 65, 80, 75, 85,
+  90, 85, 88, 92, 95), 
+  nrow = 7, ncol = 5,
+  byrow = TRUE)
+
+colnames(seiseki) <- c("math", "science", "japanese", "english", "society")
+rownames(seiseki) <- c("A", "B", "C", "D", "E", "F", "G")
+```
+
+# クラスター分析とは
+
+# 階層的クラスター分析
+
+階層的クラスター分析のプロセス
+1. データから距離を求める 
+2. クラスター分析の方法を決める（最近隣法、最遠隣法など）
+3. 選択された方法のコーフェン行列を求める
+4. コーフェン行列に基づいて、樹形図を考える
+
+```{r}
+seiseki_dist <- dist(seiseki)
+
+res_hc <- hclust(seiseki_dist)
+res_hc
+```
+```{r}
+summary(res_hc)
+
+res_hc
+
+cat("clustering height\n")
+res_hc$height
+
+cat("clustering order\n")
+res_hc$order
+
+
+```
+
+```{r}
+plot(res_hc)
+plot(res_hc, hang = -1)
+```
+```{r}
+plot(hclust(seiseki_dist, method = "centroid"), hang = -1)
+plot(hclust(dist(seiseki, method = "canberra"), method = "ward.D2"), hang = -1)
+```
+
+- クラスター番号を返す
+```{r}
+cutree(res_hc, k = 2)
+```
+
+```{r}
+plot(res_hc, hang = -1)
+rect.hclust(res_hc, k = 2, border = c(2, 4))
+```
+
+```{r}
+heatmap(seiseki)
+
+gplots::heatmap.2(seiseki)
+```
+
+```{r}
+heatmap(seiseki, Rowv = NA, Colv = NA)
+```
+
+## コーフェン行列
+```{r}
+cophenetic(res_hc)
+```
+
+階層クラスター分析の樹形図は、コーフェン行列に基づいてるため、
+クラスター分析の妥当性に関しては、コーフェン行列と距離行列の相関係数を用いる
+
+
+下記にて、
+コーフェン行列（最遠隣法）と距離行列（ユークリッド）の相関係数を求める.
+
+```{r}
+cor(seiseki_dist, cophenetic(res_hc))
+```
+
+
+コーフェン行列と距離行列の相関係数の値が大きいほど、歪みがすくないと判断するが、
+歪みが少ない = クラスター分析の結果が妥当というわけではない。
+
+比較的妥当な結果がかえってくるWard法はこの相関係数が低い値になる。
+
+# 非階層的クラスター分析
+代表的な方法として、k-means法がある
+k-means法のアルゴリズムとして
+- Lloyd法(1957)
+- Forgy法(1965)
+- MacQueen法(1969)
+- Hartigan-Wong法(1979)
+
+Rの `kmeans()` では Hartigan Wongaがデフォルトで指定され、
+これが他のアルゴリズムよりも良いとされている
+
+
+# モデルに基づいたクラスター分析
+
+モデルベースドクラスタリングは混合分布によるクラスター分析、潜在クラスター分析とも呼ばれている
+
+楕円分布が用いられている
+
+Rでは、mclust::mclustBICによって、そのクラスタリングが実装される
+
+```{r}
+library(mclust)
+plot(mclustBIC(iris[, 1:4]))
+```
+
+```{r}
+iris_hc <- hc(modelName = "VVV", data = iris[, 1:4])
+iris_hc
+
+iris_hcl <- hclass(iris_hc, 3)
+table(iris[, 5], iris_hcl)
+```
+
+
+```{r}
+clPairs(iris[, 1:4], cl = iris_hcl)
+```
+
+- cluster
+  非階層クラスター
+  - clara
+  - pam
+  - fanny
+  階層クラスター
+  - agnes
+  - diana
+  - mona: 2値データ
+
+
+```{r}
+library(cluster)
+
+plot(pam(iris[, 1:4], 3), ask = TRUE)
+```
+

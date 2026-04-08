@@ -1,0 +1,443 @@
+---
+title: "Ch.03"
+output: html_document
+date: "2024-12-20"
+---
+
+```{r setup, include=FALSE}
+.libPaths( c(.libPaths(), "C:/Program Files/R/R-4.2.1/library") )
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(MatchIt)
+library(tidyverse)
+library(broom)
+library(WeightIt)
+library(cobalt)
+
+
+dir_dbx <- "C:/Users/d19008/dentsuDropbox Dropbox/Yuu TANAKA"
+dir_dat <- "work-place/000-data"
+dir_wk <- "book/効果検証入門"
+fname <- file.path(
+  dir_dbx,
+  dir_dat,
+  dir_wk,
+  "Kevin_Hillstrom_MineThatData_E-MailAnalytics_DataMiningChallenge_2008.03.20.csv"
+)
+
+
+email_data <- read_csv(fname)
+```
+
+
+```{r}
+# (4) 女性向けメールが配信されたデータを削除したデータを作成
+male_df <- email_data %>%
+  filter(segment != "Womens E-Mail") %>% # 女性向けメールが配信されたデータを削除
+  mutate(treatment = ifelse(segment == "Mens E-Mail", 1, 0)) # 介入を表すtreatment変数を追加
+
+# (5) セレクションバイアスのあるデータを作成
+## seedを固定する
+set.seed(1)
+
+## 条件に反応するサンプルの量を半分にする
+obs_rate_c <- 0.5
+obs_rate_t <- 0.5
+
+## バイアスのあるデータを作成
+biased_data <- male_df %>%
+  mutate(obs_rate_c = ifelse( (history > 300) | (recency < 6) | (channel == "Multichannel"), obs_rate_c, 1),
+         obs_rate_t = ifelse( (history > 300) | (recency < 6) | (channel == "Multichannel"), 1, obs_rate_t),
+         random_number = runif(n = NROW(male_df))) %>%
+  filter( (treatment == 0 & random_number < obs_rate_c ) |
+            (treatment == 1 & random_number < obs_rate_t) )
+
+# (6) 傾向スコアの推定
+ps_model <- glm(data = biased_data,
+                formula = treatment ~ recency + history + channel,
+                family = binomial)
+
+summary(ps_model)
+```
+
+
+```{r}
+# (7) 傾向スコアマッチング
+
+## 傾向スコアを利用したマッチング
+m_near <- matchit(formula = treatment ~ recency + history + channel,
+                  data = biased_data,
+                  method = "nearest",
+                  replace = TRUE)
+m_near
+
+## マッチング後のデータを作成
+matched_data <- match.data(
+  m_near,
+  drop.unmatched = TRUE)
+# drop.unmatched = TRUE, the default, units with weights of zero, 
+# which are those units that were discarded by common support or the caliper or 
+# were simply not matched, will be dropped from the dataset, leaving only the subset of matched units. 
+
+matched_data %>% glimpse()
+#> $ distance
+#> $ weights の2カラムが追加
+
+## マッチング後のデータで効果の推定
+PSM_result <- lm(data = matched_data,
+                 formula = spend ~ treatment) %>%
+  tidy()
+PSM_result
+
+matched_data %>% 
+  group_by(treatment) %>% 
+  summarise(spend_mean = mean(spend)) %>% 
+  pivot_wider(names_from = treatment, values_from = spend_mean) %>% 
+  mutate(att = `1` - `0`)
+
+```
+matchit()では基本的にATTの推定が行われる
+マッチングが行われたデータに対して、
+平均の差を求めること、回帰分析でspend ~ treatmentと介入変数のみを含む
+回帰分析を行うことで、同じ結果が得られる
+
+
+```{r}
+check_matched <- match.data(
+  m_near,
+  drop.unmatched = FALSE
+)
+
+
+summary(check_matched)
+
+nrow(matched_data)
+nrow(subset(check_matched, weights == 0))
+nrow(subset(check_matched, weights != 0))
+```
+
+```{r}
+summary(m_near)
+plot(m_near, type = "jitter", interactive = FALSE)
+```
+
+```{r}
+hist(biased_data$treatment)
+hist(matched_data$treatment)
+
+hist(biased_data %>% filter(spend != 0) %>% pull(spend))
+hist(matched_data %>% filter(spend != 0) %>% pull(spend))
+```
+
+## 逆確率重み付き推定
+
+```{r}
+# (8) 逆確率重み付き推定（IPW）
+## ライブラリの読み込み
+library(WeightIt)
+
+## 重みの推定
+weighting <- weightit(treatment ~ recency + history + channel,
+              data = biased_data,
+              method = "ps",
+              estimand = "ATE")
+
+## 重み付きデータでの効果の推定
+IPW_result <- lm(data = biased_data,
+                 formula = spend ~ treatment,
+                 weights = weighting$weights) %>%
+  tidy()
+IPW_result
+```
+Interceptの結果は $E[Y^{(0)}]$ の推定値となり、
+treatmentの結果は $E[Y^{(1)}] - E[Y^{(0)}]$ の推定値となる
+
+良い傾向スコアとは、マッチングを行った後のデータにおいて、
+共変量のバランスがとれているかが重要
+
+そこで、共変量のバランスがとれているかを確認するために、
+共変量の平均が近い値かを確認することが必要
+
+マッチングしたデータ / 重み付きのデータのそれぞれで見ることができる
+
+```{r}
+# (9) 共変量のバランスを確認
+
+plot(summary(m_near), position = NULL, threshold = 0.1, xlim = c(0, 0.6))
+# plot.summary.matchit
+plot(summary(weighting), position = NULL, )
+##ライブラリの読み込み
+# ## マッチングしたデータでの共変量のバランス
+# library(cobalt)
+# love.plot(m_near,
+#           threshold = .1)
+# 
+# ## 重み付きデータでの共変量のバランス
+# love.plot(weighting,
+#           threshold = .1)
+```
+```{r}
+res_mnear <- summary(m_near)
+
+diff_all <- abs(res_mnear$sum.all[, 3])
+diff_matched <- abs(res_mnear$sum.matched[, 3])
+
+diff_a <- rev(diff_all)
+diff_m <- rev(diff_matched)
+
+max_x <- max(diff_a, diff_m)
+
+label_0 <- rownames(res_mnear$sum.all)
+label_1 <- rev(label_0)
+dotchart(diff_a, xlim = c(0, max_x), labels = label_1)
+abline(v = 0.00, col = 8)
+abline(v = 0.10, col = 8)
+abline(v = 0.05, col = 8, lty = 2)
+par(new = TRUE)
+dotchart(diff_m, xlim = c(0, max_x), labels = label_1, pch = 16)
+```
+love.plotで描画できるが、動かないため、通常のplot()関数で対応
+
+処置群と統制文の分布の違いが小さくなったかを確認するためのグラフで
+横軸は標準化平均差の絶対値(Absolute Standardized Mean Difference) を表し、
+調整前より調整後がどの程度、その差が小さくなっているかを見る。
+この値が0である方がよしとされており、0.1より小さければ問題はないとされている
+
+標準化平均差の絶対値が0.1よりも大きい場合は、
+両群がバランスするように、傾向スコアのモデルに高次の項、非線形の変換、交互作用項などを
+入れることが求められる
+
+### 傾向スコアと回帰分析の比較に関して
+回帰分析は目的変数Yを共変量Xの関係に関するモデリングを丁寧に行いといけない必要がある。
+モデル自体は手軽ではあるが、Yに対して豊富に情報がないと難しい
+
+それに比べて傾向スコアの場合は
+Yに関する情報があまりなくても実施することができるというメリットはある
+
+
+### マッチングとIPWの差 -手法ごとに異なる因果効果の差異
+傾向スコアを利用した効果の推定は、マッチングやIPWの結果と一致することはまれである。
+マッチングはATTを推定し、IPWはATEを推定推定するため、推定対象が異なることがその一つの要因である
+
+```{r}
+# (10) 統計モデルを用いたメールの配信のログを分析
+## 学習データと配信ログを作るデータに分割
+set.seed(1)
+
+train_flag <- sample(NROW(male_df), NROW(male_df)/2, replace = FALSE)
+
+male_df_train <- male_df[train_flag,] %>%
+  filter(treatment == 0)
+
+male_df_test <- male_df[-train_flag,]
+
+## 売上が発生する確率を予測するモデルを作成
+predict_model <- glm(data = male_df_train,
+                     formula = conversion ~ recency + history_segment +
+                       channel + zip_code,
+                     family = binomial)
+
+## 売上の発生確率からメールの配信確率を決める
+pred_cv <- predict(predict_model,
+                   newdata = male_df_test,
+                   type = "response")
+pred_cv_rank <- percent_rank(pred_cv)
+
+## 配信確率を元にメールの配信を決める
+mail_assign <- sapply(pred_cv_rank, rbinom, n = 1, size = 1)
+
+## 配信ログを作成
+ml_male_df <- male_df_test %>%
+  mutate(mail_assign = mail_assign,
+         ps = pred_cv_rank) %>%
+  filter( (treatment == 1 & mail_assign == 1) |
+            (treatment == 0 & mail_assign == 0) )
+
+## 実験をしていた場合の平均の差を確認
+rct_male_lm <- lm(data = male_df_test, formula = spend ~ treatment) %>%
+  tidy()
+
+## 平均の比較
+ml_male_lm <- lm(data = ml_male_df, formula = spend ~ treatment) %>%
+  tidy()
+```
+
+```{r}
+rct_male_lm
+ml_male_lm
+```
+
+
+```{r}
+## 傾向スコアマッチングの推定(TPS)
+library(Matching)
+PSM_result <- Match(Y  = ml_male_df$spend,
+                    Tr = ml_male_df$treatment,
+                    X  = ml_male_df$ps,
+                    estimand = "ATT")
+
+## 推定結果の表示
+summary(PSM_result)
+
+## IPWの推定
+W.out <- weightit(treatment ~ recency + history_segment +
+                    channel + zip_code,
+                  data = ml_male_df,
+                  ps = ml_male_df$ps,
+                  method = "ps",
+                  estimand = "ATE")
+
+# ## 重み付けしたデータでの共変量のバランスを確認
+# love.plot(W.out,
+#           threshold = .1)
+
+## 重みづけしたデータでの効果の分析
+IPW_result <- ml_male_df %>%
+  lm(data = .,
+     spend ~ treatment,
+     weights = W.out$weights) %>%
+  tidy()
+
+IPW_result
+```
+
+# LaLondeデータセットの分析
+
+```{r}
+library(haven)
+```
+
+```{r}
+# (3)NBER archiveからデータを読み込む
+cps1_data <- read_dta("https://users.nber.org/~rdehejia/data/cps_controls.dta")
+cps3_data <- read_dta("https://users.nber.org/~rdehejia/data/cps_controls3.dta")
+nswdw_data <- read_dta("https://users.nber.org/~rdehejia/data/nsw_dw.dta")
+```
+
+
+```{r}
+# (4)データセットの準備
+## NSWデータから介入グループだけ取り出してCPS1と付ける
+cps1_nsw_data <- nswdw_data %>%
+  filter(treat == 1) %>%
+  rbind(cps1_data)
+
+## NSWデータから介入グループだけ取り出してCPS3と付ける
+cps3_nsw_data <- nswdw_data %>%
+  filter(treat == 1) %>%
+  rbind(cps3_data)
+
+# (5) RCT データでの分析
+## 共変量なしの回帰分析
+nsw_nocov <- lm(data = nswdw_data,
+                formula = re78 ~ treat) %>%
+  tidy()
+
+## 共変量付きの回帰分析
+nsw_cov <- lm(data = nswdw_data,
+              formula = re78 ~ treat + re74 + re75 + age + education + black +
+                hispanic + nodegree + married
+              ) %>%
+  tidy() %>%
+  filter(term == "treat")
+nsw_cov
+```
+
+treatの回帰係数1676がRCTで得られた結果であり、
+これをどう再現するかが問題
+
+
+
+```{r}
+# (6) バイアスのあるデータでの回帰分析
+## CPS1の分析結果
+cps1_reg <- lm(data = cps1_nsw_data,
+               formula = re78 ~ treat + re74 + re75 + age + education + black +
+                 hispanic + nodegree + married
+               ) %>%
+  tidy() %>%
+  filter(term == "treat")
+cps1_reg
+## CPS3の分析結果
+cps3_reg <- lm(data = cps3_nsw_data,
+               formula = re78 ~ treat + re74 + re75 + age + education + black +
+                 hispanic + nodegree + married
+               ) %>%
+  tidy() %>%
+  filter(term == "treat")
+cps3_reg
+```
+
+
+```{r}
+# (7) 傾向スコアマッチングによる効果推定
+## 傾向スコアを用いたマッチング
+m_near <- matchit(formula = treat ~ age + education + black + hispanic +
+                    nodegree + married + re74 + re75 + I(re74^2) + I(re75^2),
+                  data = cps1_nsw_data,
+                  method = "nearest")
+
+## 共変量のバランスを確認
+plot(summary(m_near), threshold = .1)
+
+## マッチング後のデータを作成
+matched_data <- match.data(m_near)
+
+## マッチング後のデータで効果の推定
+PSM_result_cps1 <- lm(data = matched_data,
+                      formula = re78 ~ treat) %>%
+  tidy()
+PSM_result_cps1
+```
+
+
+```{r}
+# (8) IPWによる効果推定
+## 重みの推定
+weighting <- weightit(
+  formula = treat ~ age + education + black + hispanic +
+    nodegree + married + re74 + re75 + I(re74^2) + I(re75^2),
+  data = cps1_nsw_data,
+  method = "ps",
+  estimand = "ATE")
+
+## 共変量のバランスを確認
+# love.plot(weighting,
+#           threshold = .1)
+
+## 重み付きデータでの効果の推定
+IPW_result <- lm(data = cps1_nsw_data,
+                 formula = re78 ~ treat,
+                 weights = weighting$weights) %>%
+  tidy()
+IPW_result
+
+# (9) IPWによる効果推定(ATT)
+## 重みの推定
+weighting <- weightit(
+  formula = treat ~ age + education + black + hispanic + nodegree + married + 
+    re74 + re75 + I(re74^2) + I(re75^2),
+    data = cps1_nsw_data,
+    method = "ps",
+    estimand = "ATT")
+
+## 共変量のバランスを確認
+# love.plot(weighting,
+#           threshold = .1)
+
+## 重み付きデータでの効果の推定
+IPW_result <- lm(data = cps1_nsw_data,
+                 formula = re78 ~ treat,
+                 weights = weighting$weights) %>%
+  tidy()
+IPW_result
+```
+
+IPWをつかった推定対象がATEであるため、推定結果が著しく悪い結果となったが、
+IPWでもATTを対象とすると、推定結果は近くなっていることがここからわかる
+つまり、どの手法を使うかということではなく、
+分析対象のデータがどのようなデータであり、推定したい効果がどのようなサンプルに
+おける効果なのかを十分に考える必要がある

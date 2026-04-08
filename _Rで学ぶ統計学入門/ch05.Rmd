@@ -1,0 +1,175 @@
+---
+title: "Ch.05"
+output: html_document
+date: "2023-08-08"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 5.4 t検定の考え方とRを使った計算
+```{r}
+new <- c(2, 3, 6, 7, 4, 5, 6, 3)
+old <- c(5, 7, 5, 8, 9, 7, 7, 6)
+
+t.test(new, old, var = TRUE)
+```
+以下、実際にt検定を実装してみる
+
+$$
+t = \frac{(\bar{X}_1 - \bar{X}_2) - (\mu_1 - \mu_2)} {s_{\bar{X}_1-\bar{X}_2}}
+$$
+1. t値の分子を計算する $(\bar{X}_1 - \bar{X}_2) - (\mu_1 - \mu_2)$ の部分
+```{r}
+mean_new <- mean(new)
+mean_old <- mean(old)
+
+numer <- mean_new - mean_old
+```
+
+2. 分母の標準誤差を求める
+```{r}
+ss_new <- sum((new - mean_new)^2)
+ss_old <- sum((old - mean_old)^2)
+n_new <- length(new)
+n_old <- length(old)
+
+ss_tot <- sqrt(ss_new / length(new) + ss_old / length(old))
+ss_tot
+
+denom <- sqrt((ss_new + ss_old) / (n_new + n_old - 2) * (n_new + n_old) / (n_new * n_old))
+denom
+# t
+numer / denom 
+```
+
+
+```{r}
+# p-value
+dt(numer / denom, df = length(new) + length(old) - 2)
+
+dt(numer / denom, df = length(new) + length(old) - 2) < 0.025
+```
+
+
+```{r}
+x_seq <- seq(-3, 3, length.out = 100)
+plot(x_seq, dt(x_seq, df = 14), type = "l")
+abline(v = qt(0.025, df = length(new) + length(old) - 2), lty = "dashed")
+
+t_x <- numer / denom
+p_y <- dt(numer / denom, df = length(new) + length(old) - 2)
+points(t_x, p_y , col = "red")
+```
+
+
+## 5.5
+```{r}
+boys  <- c(143.1, 140.9, 147.2, 139.8, 141.3, 150.7, 149.4, 145.6, 146.5, 148.5, 141.2, 136.5, 145.8, 148.1, 144.3)
+girls <- c(138.7, 142.8, 150.3, 148.4, 141.7, 149.5, 156.5, 144.6, 144.4, 145.7, 148.3, 140.8, 146.2, 149.9, 144.1)
+
+plot(c(rep(1, 15), rep(2, 15)), c(boys, girls), xlim=c(0, 3), ylim=c(130, 160), xlab="", ylab="height", xaxt="n")
+points(c(1, 2), c(mean(boys), mean(girls)), col = "red", pch = 19)
+axis(side=1, at=c(1, 2), labels=c("boys", "girls"))
+
+sd(boys)
+sd(girls)
+t.test(boys, girls, var = TRUE)
+```
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+
+
+```{r}
+# figure 5.1 (b)
+boys  <- c(142.3, 142.5, 145.7, 143.5, 144.2, 145.1, 145.9, 145.2, 146.8, 145.7, 145.4, 144.6, 144.2, 145.9, 142.1)
+girls <- c(143.5, 144.6, 143.4, 146.6, 145.3, 147.7, 147.2, 147.8, 145.3, 145.7, 147.5, 147.2, 148.8, 147.9, 143.3)
+plot(c(rep(1, 15), rep(2, 15)), c(boys, girls), xlim=c(0, 3), ylim=c(130, 160), xlab="", ylab="height", xaxt="n")
+points(c(1, 2), c(mean(boys), mean(girls)), col = "red", pch = 19)
+axis(side=1, at=c(1, 2), labels=c("boys", "girls"))
+
+sd(boys)
+sd(girls)
+
+t.test(boys, girls, var = TRUE)
+```
+ 
+```{r}
+boys  <- c(143.1, 140.9, 147.2, 139.8, 141.3, 150.7, 149.4, 145.6, 146.5, 148.5, 141.2, 136.5, 145.8, 148.1, 144.3)
+girls <- c(138.7, 142.8, 150.3, 148.4, 141.7, 149.5, 156.5, 144.6, 144.4, 145.7, 148.3, 140.8, 146.2, 149.9, 144.1)
+boys_2  <- c(142.3, 142.5, 145.7, 143.5, 144.2, 145.1, 145.9, 145.2, 146.8, 145.7, 145.4, 144.6, 144.2, 145.9, 142.1)
+girls_2 <- c(143.5, 144.6, 143.4, 146.6, 145.3, 147.7, 147.2, 147.8, 145.3, 145.7, 147.5, 147.2, 148.8, 147.9, 143.3)
+
+plot(
+  c(rep(1, 15), rep(2, 15), rep(3, 15), rep(4, 15)), 
+  c(boys, girls, boys_2, girls_2), 
+  xlim=c(0.5, 4.5), ylim=c(130, 160), 
+  xlab="", ylab="height", xaxt="n"
+  )
+points(c(1, 2, 3, 4), c(mean(boys), mean(girls), mean(boys_2), mean(girls_2)), col = "red", pch = 19)
+abline(v = 2.5)
+axis(side=1, at=c(1, 2, 3, 4), labels=c("grp1:boys", "grp1:girls", "grp2:boys", "grp2:girls"))
+
+```
+
+## 5.6
+```{r}
+d_t <- c(6, 16, 10, 14, 24, 8)
+d_b <- c(1, 10, 5, 15, 20, 3)
+t.test(d_t, d_b, var = TRUE)
+
+d_diff <- d_t - d_b
+t.test(d_diff, mu = 0)
+```
+- shapiro.wilk
+```{r}
+boys  <- c(143.1, 140.9, 147.2, 139.8, 141.3, 150.7, 149.4, 145.6, 146.5, 148.5, 141.2, 136.5, 145.8, 148.1, 144.3)
+girls <- c(138.7, 142.8, 150.3, 148.4, 141.7, 149.5, 156.5, 144.6, 144.4, 145.7, 148.3, 140.8, 146.2, 149.9, 144.1)
+
+shapiro.test(boys)
+shapiro.test(girls)
+```
+
+- bartlett
+```{r}
+scores <- c(boys, girls)
+gendar <- factor(c(rep(1, 15), rep(2, 15)))
+
+bartlett.test(scores ~ gendar)
+```
+
+## 5.7
+```{r}
+X1 <- c(23, 20, 20, 24, 17, 19, 26, 22, 19, 21)
+X2 <- c(17, 23, 25, 34, 25, 28, 20, 31, 26, 36)
+
+mean(X1)
+mean(X2)
+var(X1)
+var(X2)
+```
+
+```{r}
+score <- c(X1, X2)
+group <- factor(c(rep(1, 10), rep(2, 10)))
+
+bartlett.test(score ~ group)
+```
+
+```{r}
+t.test(X1, X2)
+```
+
+```{r}
+t.test(X1, X2, var.equal = TRUE)
+```
+

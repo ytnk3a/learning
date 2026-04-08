@@ -1,0 +1,165 @@
+---
+title: "Ch.16 集団学習"
+output: html_document
+date: "2024-01-01"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(mlbench)
+library(adabag)
+```
+
+# 集団学習とは
+
+## バギング
+- bagging: bootstrap aggregation
+   
+1. 教師データから、復元抽出でm回抽出を行い、新たな訓練機を作り
+   モデル $h$ を構築する
+2. ステップ1を $B$ 回繰り返し、 $B$ 個のモデルを構築
+3. 回帰の場合は、$B$ 個の平均値 $H(x) = \frac{1}{B} \sum^B_{i=1} h_i$
+4. 判別の場合は、多数決をとり、 $H(x) = \arg \ \max|\{ i| h_i=y \}|$
+```{r}
+# pak::pkg_install("rlang")
+# 
+
+#さきほどのリンクをペーストする
+URL <- "https://cran.r-project.org/src/contrib/Archive/adabag/adabag_4.3.tar.gz"
+
+#type="source"で実行する
+install.packages(URL, repos=NULL, type="source")
+```
+
+
+
+データに関してClass: 良性(benign) / 悪性(malignant)
+```{r}
+data(BreastCancer)
+d_bc <- na.omit(BreastCancer)
+
+t <- floor(nrow(d_bc))
+even_n <- 2 * (1:t)
+
+bc_train <- BreastCancer[even_n, -1]
+bc_test <- BreastCancer[-even_n, -1]
+
+for (i in 1:9) {
+  bc_train[, i] <- as.integer(bc_train[, i])
+  bc_test[, i] <- as.integer(bc_test[, i])
+}
+
+bc_ba <- bagging(Class ~ ., data = bc_train)
+bc_pred <- predict(bc_ba, bc_test)
+
+tb_ba <- table(
+  bc_test[, 10],
+  bc_pred$class
+)
+
+tb_ba
+
+1 - sum(diag(tb_ba)) / sum(tb_ba)
+```
+
+## rpart
+```{r}
+bc_rp <- rpart(Class ~ ., data = bc_train)
+bc_rp_pred <- predict(bc_rp, bc_test[, -10], type = "class")
+
+tb_rp <- table(
+  bc_test[, 10],
+  bc_rp_pred
+)
+tb_rp
+
+1 - sum(diag(tb_rp)) / sum(tb_rp)
+```
+
+
+## boosting
+
+与えた教師付きデータを用いて、学習を行い、その学習結果を踏まえて
+逐次重みの調整を繰り返すことで、複数の学習結果を求める方法
+
+アルゴリズム
+1. 重みの初期値 $w_{1i}$ を生成
+2. 学習を行い重みの更新を繰り返す $(t = 1,2, \dots, T)$
+   a. 重み $w_{ti}$ を用いて、弱学習機 $\hat{y} = f_t(x)$ を構築
+   b. 誤り率 $\alpha_t = err_t$ を計算
+   c. 結果の信頼度 $\beta_t$ を計算
+   d. 重みを更新 $w_{(t+1)i} = g(w_{ti})$  
+3. 重み付き多数決で結果を出力。2値判別の場合は $F(X) = sign(\sum^T_{t=1} \beta_tf_t(x))$
+
+```{r}
+set.seed(20)
+
+bc_train_na_rmv <- na.omit(bc_train)
+bc_bst <- boosting(Class ~ ., data = bc_train_na_rmv)
+
+bc_bst_pred <- predict(bc_bst, bc_test)
+
+tb_bst <- bc_bst_pred$confusion
+
+1 - sum(diag(tb_bst)) / sum(tb_bst)
+
+```
+
+## randomforest
+
+バギングと違い、変数に対してもランダムサンプリングを行う
+
+mtry	
+Number of variables randomly sampled as candidates at each split. Note that the default values are different for
+- classification (sqrt(p) where p is number of variables in x) 
+- regression (p/3)
+
+```{r}
+library(randomForest)
+set.seed(20)
+
+p <- ncol(bc_train_na_rmv) - 1
+bc_rf <- randomForest(Class ~ ., data = bc_train_na_rmv, mtry = p/3 , proximity = TRUE)
+print(bc_rf)
+
+summary(bc_rf)
+
+bc_rf$type
+
+plot(bc_rf)
+```
+
+
+```{r}
+varImpPlot(bc_rf)
+```
+
+
+```{r}
+bc_rf_pred <- predict(bc_rf, bc_test)
+
+tb_rf <- table(
+  bc_test[, 10],
+  bc_rf_pred
+)
+tb_rp
+
+1 - sum(diag(tb_rf)) / sum(tb_rf)
+```
+
+
+```{r}
+MDSplot(bc_rf, bc_train_na_rmv$Class)
+```
+
+```{r}
+set.seed(1)
+data(iris)
+iris.rf <- randomForest(Species ~ ., iris, proximity=TRUE,
+                        keep.forest=FALSE)
+MDSplot(iris.rf, iris$Species)
+## Using different symbols for the classes:
+MDSplot(iris.rf, iris$Species, palette=rep(1, 3), pch=as.numeric(iris$Species))
+```
+

@@ -1,0 +1,34 @@
+---
+title: "Ch.10: Rでさらに広がるデータマイニングの世界　～その他の分析メソッドについて～"
+output: html_document
+date: "2023-08-03"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 第10章　Rでさらに広がるデータマイニングの世界　～その他の分析メソッドについて～
+## 10-1　分散分析
+## 10-2　一般化線形モデルとその応用
+## 10-3　主成分分析，因子分析とその発展形
+## 10-4　機械学習のその他の手法と発展形
+## 10-5　グラフ理論・ネットワーク分析
+## 10-6　計量時系列分析
+```{r}
+install.packages("MSwM")
+
+library(MSwM)
+
+x1 <- ts(sin(seq(from=0,to=0.5*pi,length.out=390)))
+x2 <- ts(sin(seq(from=0,to=pi,length.out=390)))
+
+model1<-lm(stock1~x1+x2)
+msmModel1<-msmFit(model1,k=2,sw=rep(T,4))
+plotProb(msmModel1,1)
+plotProb(msmModel1,2)
+plotProb(msmModel1,3)
+```
+
+## 10-7　ベイジアンモデリング
+## 10-8　その他の新旧メソッドたち

@@ -1,0 +1,44 @@
+---
+title: "islr-ch04"
+format: html
+---
+
+```{r}
+library(ISLR)
+
+data("Default")
+Default
+```
+
+```{r}
+glm(default ~ balance, data = Default)
+```
+
+
+
+```{r}
+library(MASS)
+
+res_lda <- lda(Species ~ ., data = iris)
+res_lda
+```
+
+```{r}
+attach(Smarket)
+train <- Year < 2005
+
+Smarket_2005 <- Smarket[!train, ]
+```
+
+
+```{r}
+fit_lda <- lda(Direction ~ Lag1 + Lag2, data = Smarket, subset = train)
+fit_lda
+
+prd_lda <- predict(fit_lda, Smarket_2005)
+names(prd_lda)
+head(prd_lda$posterior)
+head(prd_lda$class)
+head(prd_lda$x)
+```
+

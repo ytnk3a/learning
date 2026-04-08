@@ -1,0 +1,135 @@
+---
+title: "Ch.04"
+output: html_document
+date: "2023-08-08"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+
+
+hist(d, breaks = 30, xlab = "height[cm]")
+mean(d)
+```
+
+```{r}
+plot_std <- function(.d_pop, .N) {
+  mean_x <- sd_x <- se_x <- numeric(10)
+  
+  for(i in 1:10) {
+    
+    x <- sample(.d_pop, .N)
+    
+    mean_x[i] <- mean(x)
+    sd_x[i] <- sd(x)
+    se_x[i] <- sd(x) / sqrt(.N)
+    
+  }
+  
+  x_axis <- 1:10
+  plot(x_axis, mean_x, xlim = c(1, 10), ylim = c(141, 149), xlab = "")
+  arrows(x_axis, mean_x + se_x, x_axis, mean_x - se_x, angle = 90, length = 0.05)
+  arrows(x_axis, mean_x - se_x, x_axis, mean_x + se_x, angle = 90, length = 0.05)
+  abline(h = 145.5, lty = "dashed")
+  text(1, 148.8, paste0("N=", .N), adj = 0)
+}
+
+d_pop <- rnorm(2000, mean = 145.5, sd = 2.0)
+par(mfrow = c(2, 2), mar = c(2, 5, 3, 1))
+plot_std(d_pop, 10)
+plot_std(d_pop, 40)
+plot_std(d_pop, 160)
+plot_std(d_pop, 640)
+
+d_pop <- rnorm(2000, mean = 145.5, sd = 4.0)
+par(mfrow = c(2, 2), mar = c(2, 5, 3, 1))
+plot_std(d_pop, 10)
+plot_std(d_pop, 40)
+plot_std(d_pop, 160)
+plot_std(d_pop, 640)
+
+d_pop <- rnorm(800000, mean = 145.5, sd = 4.0)
+par(mfrow = c(2, 2), mar = c(2, 5, 3, 1))
+plot_std(d_pop, 100)
+plot_std(d_pop, 500)
+plot_std(d_pop, 1000)
+plot_std(d_pop, 3000)
+
+```
+
+```{r}
+qt(0.025, 30)
+```
+
+```{r}
+x_seq <- seq(-4, 4, length.out = 1000)
+plot(x_seq, dnorm(x_seq, 0, 1), type = "l")
+lines(x_seq, dt(x_seq, df = 1), lty = "dotted", col = "tomato")
+lines(x_seq, dt(x_seq, df = 5), lty = "dotted", col = "red")
+lines(x_seq, dt(x_seq, df = 30), lty = "dotted", col = "red4")
+lines(x_seq, dt(x_seq, df = 100), lty = "dashed", col = "blue")
+legend(
+  "topleft",
+  legend = c("norm", "df=1", "df=5", "df=30", "df=100"),
+  col = c("black", "tomato", "red", "red4", "blue"),
+  lty = c("solid", "dotted", "dotted", "dotted", "dashed")
+  )
+
+x_seq <- seq(-4, 4, length.out = 1000)
+plot(x_seq, dnorm(x_seq, 0, 1), type = "l",xlim = c(-0.2, 0.2), ylim = c(0.38, 0.4))
+lines(x_seq, dt(x_seq, df = 10), lty = "dotted", col = "tomato")
+lines(x_seq, dt(x_seq, df = 50), lty = "dotted", col = "red")
+lines(x_seq, dt(x_seq, df = 100), lty = "dotted", col = "red4")
+lines(x_seq, dt(x_seq, df = 1000), lty = "dashed", col = "blue")
+legend(
+  "topleft",
+  legend = c("norm", "df=10", "df=50", "df=100", "df=1000"),
+  col = c("black", "tomato", "red", "red4", "blue"),
+  lty = c("solid", "dotted", "dotted", "dotted", "dashed")
+  )
+```
+### fig 4.5
+```{r}
+d <- rnorm(2000, mean=145.5, sd=4)
+N <- 40
+mean_x <- c()
+sd_x <- c()
+se_x <- c()
+for (i in 1:20) {
+  x <- sample(d, N)
+  mean_x[i] <- mean(x)
+  sd_x[i] <- sqrt(var(x))
+  se_x[i] <- sd_x[i]/sqrt(N) 
+}
+xaxis <- seq(1, 20, 1)
+plot(xaxis, mean_x, xlim=c(1, 20), ylim=c(142, 149), xlab="ID", ylab="height")
+arrows(xaxis, mean_x+se_x*qt(1-0.025, df=N-1), xaxis, mean_x-se_x*qt(1-0.025, df=N-1), angle = 90, length = 0.05)
+arrows(xaxis, mean_x-se_x*qt(1-0.025, df=N-1), xaxis, mean_x+se_x*qt(1-0.025, df=N-1), angle = 90, length = 0.05)
+lines(c(0, 21), c(145.5, 145.5), lty=2)
+
+```
+
+```{r}
+n <- 20
+x <- sample(d, n, replace = FALSE)
+mean(x)
+t.test(x, mu = 145.5)
+
+d_b <- rnorm(2000, mean = 148.5, sd = 4)
+x_b <- sample(d_b, n, replace = FALSE)
+t.test(x_b, mu = 145.5)
+```
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,15 @@
+---
+title: "econom-r-ch05"
+format: html
+---
+
+```{r}
+library(tidyverse)
+library(tidysynth)
+data("smoking")
+head(smoking)
+```
+```{r}
+
+```
+

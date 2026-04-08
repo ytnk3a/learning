@@ -1,0 +1,201 @@
+---
+title: "Ch.3: 分類モデルの作成"
+format: html
+editor: source
+---
+
+
+```{r}
+library(tidyverse)
+library(yardstick)
+library(tune)
+library(parsnip)
+library(rsample)
+library(modeldata)
+
+bivariate_train
+bivariate_train %>% 
+  group_by(Class) %>% 
+  slice(1:10) %>% 
+  ggplot(aes(x = A, y = B, shape = Class)) +
+  geom_point(size = 4)
+```
+
+```{r}
+
+```
+
+## 3-1　分類モデルとは
+## 3-2　parsnipパッケージのpredict()関数の扱い方
+## 3-3　parsnipパッケージによる分類モデルの作成
+```{r}
+log_clf <- logistic_reg() %>% 
+  set_mode("classification") %>% 
+  set_engine("glm")
+
+log_clf_fit <- log_clf %>% 
+  fit(Class ~ A + B, data = bivariate_train)
+
+log_clf_fit
+```
+```{r}
+grid_a <- seq(max(bivariate_train$A), min(bivariate_train$A), length = 100)
+grid_b <- seq(max(bivariate_train$B), min(bivariate_train$B), length = 100)
+
+grid_ab <- expand.grid(A = grid_a, B = grid_b)
+
+predict(log_clf_fit, new_data = grid_ab) %>% 
+  bind_cols(grid_ab) %>% 
+  ggplot(aes(x = A, y = B)) +
+  geom_tile(aes(fill = .pred_class)) +
+  geom_point(
+    data = bivariate_train %>% 
+      group_by(Class) %>% 
+      slice(1:10),
+  aes(x = A, y = B, shape = Class),
+  size = 4
+  ) +
+  xlim(500, 5000) +
+  ylim(50, 250)
+```
+
+## 3-4　yardstickパッケージによる離散値の評価指標
+```{r}
+data("two_class_example")
+two_class_example
+```
+
+```{r}
+two_class_example %>% 
+  accuracy(truth = truth, estimate = predicted)
+
+data(hpc_cv)
+hpc_cv
+hpc_cv %>% 
+  accuracy(truth = obs, estimate = pred)
+
+two_class_example %>% 
+  conf_mat(truth = truth, estimate = predicted)
+
+two_class_example %>% 
+  conf_mat(truth = truth, estimate = predicted) %>% 
+  autoplot(type = "mosaic")
+
+two_class_example %>% 
+  conf_mat(truth = truth, estimate = predicted) %>% 
+  autoplot(type = "heatmap")
+```
+
+
+## 3-5　yardstickパッケージによる連続的な確率に対する評価指標
+```{r}
+two_class_curve <- roc_curve(two_class_example, truth, Class1)
+two_class_curve %>% head()
+autoplot(two_class_curve)
+```
+
+```{r}
+rand1_rf_res <- rand_forest(mtry = 1, trees = 2000) %>% 
+  set_engine("ranger", importance = "impurity") %>% 
+  set_mode("classification") %>% 
+  fit(Class ~ ., data = two_class_dat) %>% 
+  predict(two_class_dat, type = "prob") %>% 
+  bind_cols(two_class_dat) %>% 
+  roc_curve(truth = Class, .pred_Class1)
+rand2_rf_res <- rand_forest(mtry = 1, trees = 5) %>% 
+  set_engine("ranger", importance = "impurity") %>% 
+  set_mode("classification") %>% 
+  fit(Class ~ ., data = two_class_dat) %>% 
+  predict(two_class_dat, type = "prob") %>% 
+  bind_cols(two_class_dat) %>% 
+  roc_curve(truth = Class, .pred_Class1)
+rand3_rf_res <- rand_forest(mtry = 1, trees = 2) %>% 
+  set_engine("ranger", importance = "impurity") %>% 
+  set_mode("classification") %>% 
+  fit(Class ~ ., data = two_class_dat) %>% 
+  predict(two_class_dat, type = "prob") %>% 
+  bind_cols(two_class_dat) %>% 
+  roc_curve(truth = Class, .pred_Class1)
+
+autoplot(rand1_rf_res) +
+  geom_path(
+    data = rand2_rf_res,
+    linetype = "dashed",
+    aes(x = 1 - specificity, y = sensitivity),
+    col = "skyblue"
+  ) +
+  geom_path(
+    data = rand3_rf_res,
+    linetype = "longdash",
+    aes(x = 1 - specificity, y = sensitivity),
+    col = "orange"
+  )
+```
+
+### pr_curve()関数によるPR曲線
+```{r}
+two_class_example %>% 
+  pr_curve(truth, Class1) %>% 
+  autoplot()
+```
+
+```{r}
+two_class_example %>% 
+  pr_auc(truth, Class1)
+```
+
+```{r}
+two_class_example %>% 
+  gain_curve(truth, Class1) %>% 
+  autoplot()
+```
+```{r}
+two_class_example %>% 
+  lift_curve(truth, Class1) %>% 
+  autoplot()
+```
+### yardstick()パッケージの関数に対する補足
+評価対象のクラスは因子型の1つ目であるので、それを変更したい場合は`event_level`で変更可能
+```{r}
+two_class_example %>% 
+  f_meas(truth, predicted, event_level = "second")
+```
+
+ROCで行った閾値の変化をprobablyパッケージを使って実装することも可能
+```{r}
+library(probably)
+
+two_class_example %>% 
+  mutate(change_threshold = make_two_class_pred(Class1, levels(truth), 0.7)) %>% 
+  head()
+```
+
+
+# Memo Ch.03
+- 混合行列をもとにした評価指標
+- 感度(Senstivity)
+- 再現率（Recall)
+- 特異度（Specificity）: 新陰性率（True Negative Rate: TNR）: True Negative / (False Postive + True Negative)
+- 適合率（Precision）:陽性的中率(Positive Predictive Value: PPV): TP / (TP + FP)
+- 陰性的中率（Negative Predictive Value）:  TN / TN + FN
+- F値(F1-Score, F1-measure): (1+1^2) Precision x Recall/((1^2 x Precision) + Recall)
+- Fbeta:  (1+beta^2) Precision x Recall/((beta^2 x Precision) + Recall)
+ 適合率と再現率の重みを調査平均で計算したものと、重み調整するF_beta
+- ROC: Receiver Operating Characteristic; ROC 0~1での予測モデルの場合、閾値の設定によって、予測精度は変わるが、閾値を変えた場合、
+  感度がどう変わるかの関係を描画したものが、ROC曲線であるため、左上に線が引かれたモデルの方が精度は高まる
+- ROC AUC ROC Area Under Curve
+- クラスに不均衡がある場合はROCは機能しないため、PR曲線を使うべき(Precision Recall Curve)
+- これは閾値の変化で、RecallとPrecisionがどう変わるかを見る曲線で、右上にあるほど性能が高い
+- 不均衡なデータではNegativeが多いため、すべてをNegativeと予測しても、高いと評価されるが、PR曲線はPositiveに対する予測も評価
+- PR AUCがあり、1に近いほど精度が高い
+- 累積ゲイン曲線: 予測された確率がある数値以上であれば、全データの何割の陽性を含んでいるかを計算
+- 横軸がデータ全体に対する予測確率の高い上位からの割合（% Tested 25 -> 上位25%のデータセット）
+- 縦軸が真陽性率（累積ゲイン）(%Found 50 -> 50%の陽性が含まれている)
+- この図だと、上位85%の顧客までに100%の陽性が入っているということ
+- リフト曲線: 単純なモデルに比べて何倍精度が高いか
+- 上位N%のデータだと、単純なモデルに比べて何倍精度が高いかをプロット
+- 評価対象のクラスは因子型の1つ目であるので、それを変更したい場合は`event_level`で変更可能
+
+## 3-6　まとめと参考文献
+
+

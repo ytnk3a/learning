@@ -1,0 +1,77 @@
+---
+title: "Ch.15 ツリーモデル"
+output: html_document
+date: "2023-12-31"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(rpart)
+library(rpart.plot)
+
+iris_rp <- rpart(Species ~ ., data = iris)
+```
+
+```{r}
+print(iris_rp)
+```
+
+```{r}
+plot(iris_rp, uniform = TRUE, branch = 0.6, margin = 0.05)
+text(iris_rp, use.n = TRUE, all = TRUE)
+```
+
+```{r}
+printcp(iris_rp)
+```
+
+```{r}
+set.seed(0)
+
+iris_rp2 <- rpart(Species ~ ., data = iris, minsplit = 3, cp = 0)
+printcp(iris_rp2)
+```
+
+```{r}
+plotcp(iris_rp2)
+```
+
+```{r}
+iris_rp3 <- prune(iris_rp2, cp = 0.094)
+summary(iris_rp3)
+```
+
+```{r}
+library(tree)
+
+cars_tr <- tree(dist ~ speed, data = cars)
+
+plot(cars$speed, cars$dist)
+partition.tree(cars_tr, add = TRUE, col = 2)
+```
+
+```{r}
+iris_tr <- tree(Species ~ ., data = iris)
+iris_tr1 <- snip.tree(iris_tr, nodes = c(12, 7))
+
+iris_tr
+iris_tr1
+
+iris_lab <- c("S", "C", "V")[iris[, 5]]
+plot(iris[, 3], iris[, 4], type = "n")
+text(iris[, 3], iris[, 4], labels = iris_lab)
+partition.tree(iris_tr1, add = TRUE, col = 2, cex = 1.5)
+```
+
+```{r}
+iris_rp <- rpart(Species ~ ., data = iris) # grow the rpart object
+plot(iris_rp) # plot the tree
+text(iris_rp, use.n = TRUE, all = TRUE)
+iris_rp_snip <- snip.rpart(iris_rp, toss = 3) # trim subtree at node 2
+plot(iris_rp_snip) 
+text(iris_rp_snip, use.n = TRUE, all = TRUE)
+```
+

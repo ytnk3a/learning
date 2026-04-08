@@ -1,0 +1,424 @@
+---
+title: "6章：モデルデータの可視化"
+format: html
+editor: source
+---
+
+```{r}
+library(tidyverse)
+library(gapminder)
+library(socviz)
+library(ggpmisc)
+```
+
+```{r}
+p <- ggplot(gapminder, aes(x = log(gdpPercap), y = lifeExp))
+
+p + geom_point(alpha = 0.1) +
+  geom_smooth(color = "tomato", fill = "tomato", method = MASS::rlm) +
+  geom_smooth(color = "steelblue", fill = "steelblue", method = lm) 
+
+p + geom_point(alpha = 0.1) +
+  geom_smooth(color = "steelblue", fill = "steelblue", formula = y ~ log(x))
+
+p + geom_point(alpha = 0.1) +
+  geom_smooth(color = "tomato", fill = "tomato", formula = y ~ poly(x, 2)) +
+  stat_poly_eq(
+    formula = y ~ poly(x, 2),
+    aes(label = paste(stat(eq.label))),
+    parse = TRUE
+    )
+
+p + geom_point(alpha = 0.1) +
+  geom_smooth(color = "steelblue", fill = "steelblue", formula = y ~ x^2 + x)
+```
+
+### fig 6.1
+
+```{r}
+formula61 <- y ~ splines::bs(x, df = 3)
+
+p + geom_point(alpha = 0.1) +
+  geom_smooth(
+    color = "tomato",
+    method = "lm",
+    size = 1.2,
+    formula = formula61,
+    se = FALSE
+  ) +
+  stat_poly_eq(
+    formula = formula61,
+    aes(label = paste(stat(eq.label))),
+    parse = TRUE
+  )
+```
+```{r}
+summary(fm1 <- lm(weight ~ splines::bs(height, df = 5), data = women))
+```
+
+### fig 6.1
+```{r}
+p + geom_point(alpha = 0.1) +
+  geom_quantile(color = "tomato", size = 1.2, method = "rqss", lambda = 1, quantiles = c(0.20, 0.5, 0.85))
+```
+## 6.1 複数の回帰直線を凡例付きで一度に図示する
+
+### fig 6.2
+
+```{r}
+p0 <- ggplot(
+  gapminder,
+  aes(x = log(gdpPercap), y = lifeExp)
+)
+
+p1 <- p0 + geom_point(alpha = 0.2) +
+  geom_smooth(method = "lm", aes(color = "OLS", fill = "OLS")) +
+  geom_smooth(method = "lm", formula = y ~ splines::bs(x, df = 3),
+              aes(color = "Cubic Splines", fill = "Cubic Splines")) +
+  geom_smooth(method = "loess", aes(color = "LOESS", fill = "LOESS"))
+
+p1 + scale_color_manual(name = "Models", values = RColorBrewer::brewer.pal(3, "Set1")) +
+  scale_fill_manual(name = "Models", values = RColorBrewer::brewer.pal(3, "Set1")) +
+  theme(legend.position = "top")
+```
+
+
+
+## 6.2 モデルオブジェクトの中身を確認する
+```{r}
+out <- lm(lifeExp ~ gdpPercap + pop + continent, data = gapminder)
+summary(out)
+```
+
+```{r}
+str(out)
+```
+
+
+## 6.3 モデルから図に使えるデータを正しく抽出する
+
+## 6.4 予測の図示
+```{r}
+min_gdp <- min(gapminder$gdpPercap)
+max_gdp <- max(gapminder$gdpPercap)
+
+med_pop <- median(gapminder$pop)
+
+pred_df <- expand.grid(
+  gdpPercap = (seq(from = min_gdp, to = max_gdp, length.out = 100)),
+  pop = med_pop,
+  continent = c("Africa", "Americas", "Asia", "Europe", "Oceania")
+)
+pred_out <- predict(object = out, newdata = pred_df, interval = "predict")
+head(pred_out)
+```
+
+```{r}
+pred_df <- cbind(pred_df, pred_out)
+head(pred_df)
+```
+### fig 6.4
+```{r}
+p <- ggplot(
+  subset(pred_df, continent %in% c("Europe", "Africa")),
+  aes(
+    x = gdpPercap, y = fit, ymin = lwr, ymax = upr, 
+    color = continent, fill = continent, group = continent
+    ),
+  alpha = 0.5,
+  inherit.aes = FALSE
+  ) +
+  geom_line() +
+  geom_ribbon(alpha = 0.2, color = NA) +
+  scale_x_log10(labels = scales::dollar)
+
+p
+```
+
+## 6.5 `broom`パッケージによるtidyなモデルオブジェクトの取り扱い
+
+### fig 6.
+```{r}
+library(broom)
+
+out_comp <- tidy(out)
+out_comp %>% 
+  as.data.frame() %>% 
+  round_df()
+```
+
+### fig 6.5
+```{r}
+p <- ggplot(out_comp, aes(x = term, y = estimate))
+
+p + geom_point() + coord_flip()
+```
+
+
+### fig 6.6 回帰係数を信頼区間と合わせて表示する
+```{r}
+out_conf <- tidy(out, conf.int = TRUE)
+
+out_conf <- subset(out_conf, term %nin% "(Intercept)")
+out_conf$nicelabs <- prefix_strip(out_conf$term, "continent")
+
+p <- ggplot(out_conf, aes(x = reorder(nicelabs, estimate), y = estimate, ymin = conf.low, ymax = conf.high))
+
+p + geom_pointrange() +
+  coord_flip()
+```
+
+
+```{r}
+out_aug <- augment(out)
+out_aug
+```
+
+### fig 6.
+```{r}
+out_aug <- augment(out)
+head(out_aug) %>% 
+  as.data.frame() %>% 
+  round_df()
+```
+```{r}
+ggplot(out_aug, aes(x = .fitted, y = .resid)) +
+  geom_point()
+```
+```{r}
+plot(out)
+```
+
+```{r}
+glance(out) %>% 
+  as.data.frame() %>% 
+  round_df()
+```
+
+### fig 6.8
+```{r}
+library(survival)
+out_cph <- coxph(Surv(time, status) ~ age + sex, data = lung)
+out_surv <- survfit(out_cph)
+```
+
+```{r}
+out_tidy <- tidy(out_surv)
+p <- ggplot(out_tidy, aes(x = time, y = estimate)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.2)
+p
+```
+
+## 6.6 グループ化したデータの分析およびリスト列の取り扱い
+```{r}
+eu77 <- gapminder %>% 
+  filter(continent == "Europe", year == 1977)
+
+fit <- lm(lifeExp ~ log(gdpPercap), data = eu77)
+summary(fit)
+```
+```{r}
+out_le <- gapminder %>% 
+  group_by(continent, year) %>% 
+  nest()
+
+out_le
+```
+```{r}
+fit_ols <- function(df) {
+  lm(lifeExp ~ log(gdpPercap), data = df)
+}
+
+out_tidy <- out_le %>% 
+  mutate(
+    model = map(data, fit_ols),
+    tidied = map(model, tidy)
+    ) %>% 
+  unnest(tidied) %>% 
+  select(!c(data, model)) %>% 
+  filter(term %nin% "(Intercept)" & continent %nin% "Oceania")
+
+```
+
+### fig 6.9
+```{r}
+p <- ggplot(
+  out_tidy, 
+  aes(x = year, y = estimate, ymin = estimate - 2 * std.error, ymax = estimate + 2 * std.error,
+      group = continent, color = continent))
+
+p + geom_pointrange(position = position_dodge(width = 1)) +
+  scale_x_continuous(breaks = unique(gapminder$year))
+```
+
+
+## 6.7 限界効果の可視化
+限界効果の可視化はロジスティック回帰モデルにおいて、回帰係数の解釈がこれまで考えられていた以上に
+困難であること、特にモデルに相互作用が含まれている場合に困難だったとわかってきている
+```{r}
+library(margins)
+```
+```{r}
+gss_sm$polviews_m <- relevel(gss_sm$polviews, ref = "Moderate")
+
+out_bo <- glm(obama ~ polviews_m + sex*race, family = "binomial", data = gss_sm)
+summary(out_bo)
+```
+```{r}
+bo_m <- margins(out_bo)
+summary(bo_m)
+
+par(mar = c(5, 15, 1, 1))
+plot(bo_m, horizontal = TRUE)
+```
+```{r}
+cplot(out_bo, x = "polviews_m", what = "prediction")
+# cplot(out_bo, x = "sexFemale", what = "effect")
+```
+```{r}
+m <- lm(Sepal.Length ~ Sepal.Width, data = iris)
+cplot(m)
+```
+
+```{r}
+bo_gg <- as_tibble(summary(bo_m))
+
+prefixes <- c("polviews_m", "sex")
+
+bo_gg$factor <- prefix_strip(bo_gg$factor, prefixes)
+bo_gg$factor <- prefix_replace(bo_gg$factor, "race", "Race: ")
+
+p <- ggplot(
+  bo_gg,
+  aes(x = reorder(factor, AME), y = AME, ymin = lower, ymax = upper)
+)
+
+p + geom_hline(yintercept = 0, color = "gray80") +
+  geom_pointrange() +
+  coord_flip() +
+  labs(x = NULL, y = "Average Marginal Effect")
+
+```
+
+
+### fig 6.11
+```{r}
+cplot(out_bo, x = "sex")
+
+pv_cp <- cplot(out_bo, x = "sex", draw = FALSE)
+
+p <- ggplot(pv_cp, aes(x = reorder(xvals, yvals), yvals, ymin = lower, ymax = upper))
+
+p + geom_hline(yintercept = 0, color = "gray80") +
+  geom_pointrange() +
+  coord_flip()
+```
+
+## 6.8 複雑な調査データの可視化
+
+
+```{r}
+library(survey)
+library(srvyr)
+
+options(survey.lonley.psu = "adjust")
+options(na.action = "na.pass")
+```
+```{r}
+subset(gss_lon, year > 1974)
+```
+
+
+```{r}
+gss_wt <- subset(gss_lon, year > 1974) %>% 
+  mutate(stratvar = interaction(year, vstrat)) %>% 
+  as_survey_design(ids = vpsu, strata = stratvar, weights = wtssall, nest = TRUE)
+
+gss_wt
+```
+```{r}
+out_grp <- gss_wt %>% 
+  filter(year %in% seq(1976, 2016, by = 4)) %>% 
+  group_by(year, race, degree) %>% 
+  summarise(prop = survey_mean(na.rm = TRUE))
+
+out_grp
+```
+```{r}
+gss_lon %>% 
+  filter(year %in% seq(1976, 2016, by = 4)) %>% 
+  group_by(year, race, degree) %>% 
+  summarise(cnt = n()) %>% 
+  mutate(prop = cnt / sum(cnt))
+
+gss_lon %>% 
+  filter(year %in% seq(1976, 2016, by = 4)) %>% 
+  group_by(year, race, degree) %>% 
+  summarise(cnt_wt = sum(wtssall)) %>% 
+  mutate(prop = cnt_wt / sum(cnt_wt)) %>% 
+  filter(year == 1976, race == "White") 
+
+gss_lon %>% 
+  filter(year %in% seq(1976, 2016, by = 4)) %>% 
+  group_by(year, race, degree) %>% 
+  summarise(cnt_wt = sum(wtssall)) %>% 
+  mutate(prop = cnt_wt / sum(cnt_wt)) %>% 
+  filter(year == 1976, race == "White") %>% 
+  pull(prop) %>% sum()
+```
+```{r}
+out_mrg <- gss_wt %>% 
+  filter(year %in% seq(1976, 2016, by = 4)) %>% 
+  mutate(racedeg = interaction(race, degree)) %>% 
+  group_by(year, racedeg) %>% 
+  summarise(prop = survey_mean(na.rm = TRUE)) %>% 
+  arrange(year, racedeg)
+
+out_mrg
+```
+```{r}
+out_mrg %>% 
+  filter(year == 1976)
+
+out_mrg %>% 
+  filter(year == 1976) %>% 
+  pull(prop) %>% sum()
+```
+
+### fig 6.12
+```{r, fig.width=10, fig.height=10}
+library(hrbrthemes)
+ggplot(
+  subset(out_grp, race %nin% "Other"),
+  aes(x = degree, y = prop, ymin = prop - 2 * prop_se, ymax = prop + 2 * prop_se,
+      fill = race, color = race, group = race)
+  ) +
+  geom_col(position = position_dodge(width = 0.9), alpha = 0.2) +
+  geom_errorbar(position = position_dodge(width = 0.9), width = 0.2) +
+  scale_x_discrete(labels = scales::wrap_format(10)) +
+  facet_wrap(~ year, ncol = 2) +
+  theme_ipsum_es()
+```
+
+### fig 6.13
+```{r, fig.width=10, fig.height=10}
+ggplot(
+  subset(out_grp, race %nin% "Other"),
+  aes(x = year, y = prop, ymin = prop - 2 * prop_se, ymax = prop + 2 * prop_se,
+      fill = race, color = race, group = race)
+  ) +
+  geom_ribbon(alpha = 0.3, aes(color = NULL)) +
+  geom_line() +
+  facet_wrap(~ degree, ncol = 2) +
+  theme_ipsum_es()
+```
+
+
+- `geom_ribbon(aes(color = NULL))`
+- `scales::wrap_format(10)`
+- ダイナマイトプロット: 棒グラフ上部のT字状のエラーバーがダイナマイトの起爆装置の押し込み棒のように見えるため
+- `broom::glance()`
+- `broom::augment()`
+
+

@@ -1,0 +1,354 @@
+---
+title: "gillespies-alg"
+format: html
+---
+```{r}
+library(tidyverse)
+library(GillespieSSA2)
+```
+
+ギレスピーアルゴリズムに関して勉強する
+
+Rの場合は`GillespieSSA2`というパッケージがあり、
+下記のように使うことができる
+
+1. 初期値を設定
+2. 反応を定義
+3. 実行
+
+の3stepを行う
+
+```{r, eval=FALSE}
+
+library(GillespieSSA2)
+
+initial_state <- c(V1 = 1, V2 = 2)
+
+pars <- c(3.38, 0.16)
+names(pars) <- c("k_det", "k_att")
+
+reactions <- list(
+    #        propensity function     effects                       name for reaction
+    reaction(~k_det*V1, c(V1 = -1, V2 = +1), "E_1"),
+    reaction(~k_att*V2, c(V2 = -1, V1 = +1), "E_2")
+)
+
+res <- ssa(
+  initial_state = initial_state,
+  reactions = reactions,
+  params = pars,
+  method = ssa_exact(),
+  final_time = 70/24,
+  census_interval = .01,
+  verbose = FALSE
+)
+
+  
+res$state
+```
+
+## ロトカ・ヴォルテル法をギレスピーアルゴリズムを使って計算してみる
+
+$$
+\begin{align}
+\frac{dx}{dt} &= \alpha x - \beta xy \\
+\frac{dy}{dt} &= -\gamma y + \delta xy
+\end{align}
+$$
+これは被食者xと捕食者yの変化率の相互作用を表したものです。
+- $alphax$ はxの増加率
+- $- \beta xy$ はxがyに食べられる数
+- $+ \delta xy$は食べることで、yが増える数
+- $-\gamma y$ はxがいなくなると減少してしまう（食べるものがなくなるので、死亡率で減少する）
+
+まず、これをdeSolveを使って微分方程式で解いてみる
+```{r}
+library(deSolve)
+ode_eq <- function(t, var, pars) {
+  
+  with(as.list(c(var, pars)), {
+    # var: x, y
+    # pars: alpha, beta, gamma, delta
+    dxdt <- alpha * x - beta * x * y
+    dydt <- -gamma * y + delta * x * y
+    
+    return(list(c(dxdt, dydt)))
+  })
+  
+}
+
+pars <- c(10, 0.03, 10, 0.025)
+names(pars) <- c("alpha", "beta", "gamma", "delta")
+var_init <- c("x" = 100, "y" = 50)
+
+times <- seq(0, 10, by = 1e-4)
+# range(out[, 2], out[, 3])
+out <- ode(y = var_init, times = times, func = ode_eq, parms = pars)
+plot(out[, 1], out[, 2], type = "l", ylim = range(out[, 2], out[, 3]))
+lines(out[, 1], out[, 3], col = "red")
+legend("topright", legend = c("x:被食者", "y:捕食者"), lty = 1, col = c("black", "red"))
+```
+参考文献
+- [ライフサイエンスと数学（その1）～人口や個体数増加の観点から～｜SAME 算数・数学教員のための情報サイト](https://same.su-gaku.net/life_science_math_01)
+- [食う-食われるの数学：捕食者-被食者モデル（ロトカ・ヴォルテラ方程式）とは？ | 趣味の大学数学](https://math-fun.net/20190729/2434/)
+- [数理生物学演習 ロトカ-ボルテラ モデル 4回目.pdf](https://koji.noshita.net/materials/compbio/compbio2019/04/04_dist.pdf)
+  - ロトカ・ヴォルテルには3つ種類あり被食-捕食系 / 競争系 / 共生系である。
+
+モデルの状態図も書いてみる
+[RPubs - 水産資源解析学第６回講義「Lotka-Volterra Model」](https://rpubs.com/gregnishihara/2898)
+を参考に
+
+```{r, eval=FALSE}
+State = c(N = 10, P = 20)
+Param = c(rP = 1, rN = 2, alphaNP = 0.8, alphaPN = 0.5)
+Time = seq(0, 50, by = 0.01)
+model = ode(State, Time, LV1, Param, method = "ode45")
+dataout = as.data.frame(model)
+dset = melt(dataout, id="time", variable.name="Species")
+dset$Species = as.factor(dset$Species)
+
+ggplot(data = data.frame(N = dataout$N, P = dataout$P, Model = "Lotka-Volterra 1"), 
+    aes(x = N, y = P, color = Model)) + geom_path(alpha = 0.6, size = 2) + geom_point(aes(x = N[1], 
+    y = P[1]), size = 4, color = "black") + geom_text(aes(x = N[1], y = P[1]), 
+    label = paste("t =", dataout$time[1]), hjust = -0.1, vjust = 0, size = 8, 
+    color = "black") + geom_point(aes(x = N[101], y = P[101]), size = 4, color = "black") + 
+    geom_text(aes(x = N[101], y = P[101]), label = paste("t =", dataout$time[101]), 
+        hjust = -0.1, vjust = 0, size = 8, color = "black") + geom_point(aes(x = N[1001], 
+    y = P[1001]), size = 4, color = "black") + geom_text(aes(x = N[1001], y = P[1001]), 
+    label = paste("t =", dataout$time[1001]), hjust = -0.1, vjust = 0, size = 8, 
+    color = "black") + theme_bw(20)
+```
+
+
+つぎに、ギレスピーアルゴリズムを使って計算してみる
+
+```{r}
+
+pars <- c(10, 0.03, 10, 0.025)
+names(pars) <- c("alpha", "beta", "gamma", "delta")
+initial_state <- c("x" = 100, "y" = 50)
+
+
+
+reactions <- list(
+    #        propensity  effects    name for reaction
+    reaction(~alpha*x,   c(x = +1), "ax"),
+    reaction(~beta*x*y, c(x = -1, y = +1), "bxy"),
+    reaction(~gamma*y,  c(y = -1), "ry"),
+    reaction(~delta*x*y, c(x = -1, y = +1), "dxy")
+)
+# reactions <- list(
+#     #        propensity function     effects                       name for reaction
+#     reaction(~alpha*x,   c(x = +1), "ax"),
+#     reaction(~-beta*x*y, c(x = -1, y = +1), "bxy"),  #<= "-"があると計算がうまくいかなかった
+#     reaction(~-gamma*y,  c(y = -1), "ry"),           #<= "-"があると計算がうまくいかなかった
+#     reaction(~delta*x*y, c(x = -1, y = +1), "dxy")
+# )
+
+res_list <- list() 
+
+for (i in 1:2) {
+  out <- ssa(
+    initial_state = initial_state,
+    reactions = reactions,
+    params = pars,
+    method = ssa_exact(),
+    final_time = 3,
+    census_interval = .001,
+    verbose = FALSE,
+    sim_name = "Lotka Predator-Prey model"
+  )
+  
+  if (i == 1) {
+    res_gil <- as_tibble(out$state) %>% 
+      mutate(
+        times = row_number(),
+        sim_no = i
+        )
+  } else {
+    res_gil <- res_gil %>% 
+      add_row(
+        as_tibble(out$state) %>% 
+          mutate(
+            times = row_number(),
+            sim_no = i
+            )
+        )
+  }
+  print(i)
+}
+
+
+plot_ssa(out)
+
+ggplot(res_gil) +
+  geom_line(aes(x = times, y = x, group = sim_no, color = "steelblue"))+
+  geom_line(aes(x = times, y = y, group = sim_no, color = "red"))
+
+```
+
+
+## スクラッチでやってみる
+
+in python 
+
+$$
+f(x; 1 / \beta) = \frac{1}{\beta} \exp (\frac{x}{\beta})
+$$
+
+in R
+$$
+f(x) = \lambda \exp(-\lambda x )
+$$
+
+
+
+```{r}
+
+s <- 0
+ii <- 100
+
+cal_gamma <- function() {
+  
+}
+
+# # 定数 gamma0 を計算する関数（アルゴリズム3 2行目と11行目の計算に利用）
+# def calc_gamma0(n_tilde):
+#     gamma0 = 0.0
+#     for gamma in gamma_r:
+#         gamma0 = gamma0 + gamma(n_tilde)
+#     return gamma0
+
+# - for save
+times  <- numeric()
+save_n <- data.frame() 
+
+# - set initila value
+i <- 0
+t <- 0
+n_ini <- c(20, 10)
+n_tilde <- n_ini
+gamma0 <- cal_gamma(n_tilde)
+
+while (ii > 0) {
+  
+  i <- i + 1
+  tau <- rexp(1, gamma0)
+  
+  if (t + tau > T) {
+    break
+  } else {
+    t <- t + tau
+    times[i] <- t
+    save_n <- save_n %>% 
+      add_row(n_tilde)
+    
+    
+    # in python
+    # # アルゴリズム3 9行目で利用するサイコロの確率の準備
+    # for r, gamma in enumerate(gamma_r):
+    #     pval[r] = gamma(n_tilde)/gamma0
+    # e = rng.choice(R, 1, p=pval)[0] # アルゴリズム3 9行目
+    # n_tilde = n_tilde + v_e[e] # アルゴリズム3 10行目
+    # result_time.append(t) # イベント発生時刻の保存（描画のため）
+    # result_n_tilde.append(n_tilde) # イベント発生時刻の保存（描画のため）
+    # gamma0 = calc_gamma0(n_tilde) # アルゴリズム3 11行目
+    
+  }
+  
+  ii <- ii - 1
+}
+
+```
+
+[RPubs - Activity II - Mathematical Models Applied to Ecology](https://rpubs.com/amandabloureiro/lotkavolterraingillespie)を参考に書いてみると、
+まず、
+rexpで次のイベントが発生するまでの時間を設定し、timesに保存
+tau <- rexp(r_total)
+t <- t + tau
+t < t_end まで繰り返す。
+この時にr_totalが引数になっていることから、繰り返しで変わる値が反映されている。
+
+イベントが発生したら、どのイベントが発生するかを乱数でセットする
+event <- runif(1, 0, r_total) で設定し、
+そのeventが
+
+0 <--> r1 <--> r1 + r2 <--> r1 + r2 + r3 <--> r1 + .. + r4
+でどのイベントが起こるかをセットする。
+
+rnは係数と、個体数の積なので、その個体数が多いところが選ばれやすい。
+> このサイトではif文をネストしているが、
+> # for r, gamma in enumerate(gamma_r):
+> #     pval[r] = gamma(n_tilde)/gamma0
+> # e = rng.choice(R, 1, p=pval)[0] # アルゴリズム3 9行目
+> のように確率で選ぶ形でも問題はない
+> rだと、sample(c(r1, r2, r3, r4), 1, prob = c(r1, r2, r3, r4)/r_total)
+
+
+```{r}
+x0 <- 100
+y0 <- 50
+t <- 0
+t_end <- 10
+
+a <- 10
+b <- 0.03
+c <- 10
+d <- 0.025
+
+x <- x0
+y <- y0
+
+data_pp <- data.frame(
+  time = c(t),
+  prey = c(x),
+  predator = c(y)
+)
+
+i <- 0
+while (t < t_end && x > 0 && y > 0) {
+  
+  r1 <- a * x
+  r2 <- b * x * y
+  r3 <- d * x * y
+  r4 <- c * y
+  
+  r_total <- r1 + r2 + r3 + r4
+  
+  if (r_total == 0) break
+  
+  tau <- rexp(1, r_total)
+  event <- runif(1, 0, r_total)
+  
+  if (event < r1) {
+    x <- x + 1
+  } else {
+    
+    if (event < r1 + r2) {
+      x <- x - 1
+    } else {
+      
+      if (event < r1 + r2 + r3) {
+        y <- y + 1
+      } else {
+        y <- y - 1
+      }
+      
+    }
+      
+  } 
+
+  t <- t + tau
+  i <- i + 1
+  if (i %% 100) {
+    print(paste0("i = ",i, ", t = ", round(t), ", t_end-t = ", t_end - t))
+  }
+  
+  data_pp <- rbind(data_pp, c(t, x, y))
+}
+
+ggplot(data_pp) +
+  geom_line(aes(x = time, y = prey), color = "blue") +
+  geom_line(aes(x = time, y = predator), color = "red")
+```
+

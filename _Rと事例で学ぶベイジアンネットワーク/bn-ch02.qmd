@@ -1,0 +1,194 @@
+---
+title: "Ch.02: 連続型データ事例：ガウシアン・ベイジアンネットワーク"
+format: html
+editor: source
+---
+
+```{r}
+library(tidyverse)
+library(bnlearn)
+library(gRain)
+library(Rgraphviz)
+library(rbmn)
+
+cropdata200 <- read_table("cropdata1.txt")
+cropdata20000 <- read_table("cropdata2.txt")
+
+colnames(cropdata200) <- c("C", "E", "G", "N", "V", "W")
+
+```
+
+## 2.1 事例紹介：作物の収穫量に関する分析 
+## 2.2 グラフィカル表現 
+```{r}
+dag_bn <- model2network("[G][E][V|G:E][N|V][W|V][C|N:W]")
+dag_bn
+plot(dag_bn)
+graphviz.plot(dag_bn)
+```
+```{r}
+crop_nodes <- nodes(dag_bn)
+for (n1 in crop_nodes) {
+  for (n2 in crop_nodes) {
+    if (dsep(dag_bn, n1, n2))
+      cat(n1, "and", n2, "are independent. \n")
+  }
+}
+```
+```{r}
+for (n1 in crop_nodes[crop_nodes != "V"]) {
+  for (n2 in crop_nodes[crop_nodes != "V"]) {
+    
+    if (n1 < n2) {
+      if (dsep(dag_bn, n1, n2, "V"))
+        cat(n1, "and", n2, "are independent given V.\n")
+    }
+  }
+}
+```
+Vで条件付けると、EとGは独立的ではない（収束結合となる）
+また、Vの前後で配置されているノードは独立となっている
+
+```{r}
+path.exists(dag_bn, from = "E", to = "C")
+```
+
+## 2.3 確率的表現 
+```{r}
+e_dist <- list(coef = c("(Intercept)" = 50), sd = 10)
+g_dist <- list(coef = c("(Intercept)" = 50), sd = 10)
+v_dist <- list(coef = c("(Intercept)" = -10.35534, E = 0.70711, G = 0.5), sd = 5)
+n_dist <- list(coef = c("(Intercept)" = 45, V = 0.1), sd = 9.949874)
+w_dist <- list(coef = c("(Intercept)" = 15, V = 0.7), sd = 7.141428)
+c_dist <- list(coef = c("(Intercept)" = 0,  N = 0.3, W = 0.7), sd = 6.25)
+dist_list <- list(E = e_dist, G = g_dist, V = v_dist, N = n_dist, W = w_dist, C = c_dist)
+```
+
+```{r}
+gbn_bn <- custom.fit(dag_bn, dist = dist_list)
+cat("----------------------------------------------")
+gbn_bn$G
+cat("----------------------------------------------")
+gbn_bn$C
+```
+
+
+```{r}
+gbn_rbmn <- bnfit2nbn(gbn_bn)
+gema_rbmn <- nbn2gema(gbn_rbmn)
+print8gema(gema_rbmn)
+```
+
+
+```{r}
+mn_rbmn <- gema2mn(gema_rbmn)
+print8mn(mn_rbmn)
+```
+```{r}
+mn_rbmn
+```
+
+```{r}
+str(mn_rbmn)
+```
+## 2.4 パラメータの推定：相関係数 
+```{r}
+dim(cropdata200)
+round(head(cropdata200), 2)
+```
+```{r}
+crop_fitted <- bn.fit(dag_bn, data = cropdata200)
+crop_fitted
+```
+```{r}
+crop_fitted$C
+```
+
+```{r}
+crop_fitted$C <- lm(C ~ N + W, data = cropdata200)
+crop_fitted$C
+```
+
+
+```{r}
+library(penalized)
+
+crop_fitted$C <- penalized(C ~ N + W, lambda1 = 0, lambda2 = 1.5, data = cropdata200)
+crop_fitted$C
+crop_fitted$E
+```
+
+$mu_c$が0であることから、切片が2.4~となることは真値とのズレが目立つため、下記のように切片がない状態へと更新する。
+この時、真値とのずれがすくなくなった
+
+```{r}
+crop_fitted$C <- lm(C ~ N + W - 1, data = cropdata200)
+crop_fitted$C
+```
+
+```{r}
+lm_c <- lm(C ~ N + W, data = cropdata200)
+lm_c
+
+confint(lm_c)
+```
+
+## 2.5 DAG 構造の学習：検定とスコア
+### 2.5.1 条件付き独立性検定
+
+```{r}
+
+```
+
+### 2.5.2 ネットワークスコア 
+## 2.6 ガウシアン・ベイジアンネットワークを使ってみよう 　　
+### 2.6.1 厳密推論 　　
+### 2.6.2 近似推論 
+## 2.7 ガウシアン・ベイジアンネットワークの図示 　　
+## 2.7.1 DAGs の図示 　　
+## 2.7.2 条件付き確率分布の図示 
+## 2.8 補足説明 
+## 2.9 参考文献
+```{r}
+
+```
+
+3 混合（離散・連続型）事例：条件付きガウシアン・ベイジアンネットワーク 
+3.1 事例紹介：健康管理にかかるコスト 
+3.2 グラフィカルおよび確率的表現 
+3.3 パラメータの推定：混合回帰 
+3.4 DAG 構造の学習：検定とスコア 
+3.5 条件付きガウシアン・ベイジアンネットワークを使ってみよう 
+3.6 参考文献
+
+
+
+4 時系列データ：ダイナミック・ベイジアンネットワーク 
+4.1 事例紹介：ドモティクス 
+4.2 グラフィカル表現 
+4.3 確率的表現 
+4.4 ダイナミック・ベイジアンネットワークの学習 
+4.5 ダイナミック・ベイジアンネットワークを使ってみよう 
+4.6 ダイナミック・ベイジアンネットワークの図示 
+4.7 参考文献
+
+5 より複雑な事例：汎用ベイジアンネットワーク 
+5.1 事例紹介：救命救急科の待ち時間 
+5.2 グラフィカルおよび確率的表現 
+5.3 Stan を使ってモデル構築
+5.3.1 データの生成
+5.3.2 変数に関する確認 
+5.4 Stan を使ったパラメータ推定
+5.4.1 参考文献
+
+6 ベイジアンネットワークの理論とアルゴリズム 6.1 条件付き独立とグラフィカルな分離 6.2 ベイジアンネットワーク 6.3 マルコフブランケット 6.4 モラルグラフ 6.5 ベイジアンネットワーク学習 　　6.5.1 構造学習 　　6.5.2 パラメータ学習 6.6 ベイジアンネットワーク推論 　　6.6.1 確率的推論とエビデンス 　　6.6.2 信念更新のアルゴリズム 6.7 因果ベイジアンネットワーク 6.8 ベイジアンネットワークの評価 6.9 参考文献
+
+7 ベイジアンネットワークのためのソフトウェア 7.1 R パッケージの概要 　　7.1.1 deal パッケージ 　　7.1.2 catnet パッケージ 　　7.1.3 pcalg パッケージ 　　7.1.4 abn パッケージ 7.2 Stan と BUGS ソフトウェアパッケージ 　　7.2.1 Stan の特徴概要 　　7.2.2 MCMC サンプリングによる推論 7.3 その他のソフトウェアパッケージ 　　7.3.1 BayesiaLab 　　7.3.2 Hugin 　　7.3.3 GeNIe
+
+8 実社会におけるベイジアンネットワークの応用 8.1 プロテインシグナルに関するネットワークの学習 　　8.1.1 ガウシアン・ベイジアンネットワーク 　　8.1.2 遺伝子表現の離散化 　　8.1.3 モデルの平均化 　　8.1.4 有意水準の閾値の選択 　　8.1.5 介入データの取り扱い 　　8.1.6 ネットワークへのクエリ 8.2 人体組成に関する予測 　　8.2.1 本研究のねらい 　　8.2.2 予測的アプローチに関する計画 　　8.2.3 候補となるベイジアンネットワークの探索 8.3 参考文献
+
+付録 A グラフ理論 A.1 グラフ，ノード，そしてアーク 　　A.1.1 グラフの構造 A.2 参考文献
+
+付録 B 確率分布 B.1 一般的特徴 B.2 周辺分布と条件付き分布 B.3 離散型分布 　　B.3.1 二項分布 　　B.3.2 多項分布 　　B.3.3 その他の一般的な分布 B.4 連続型分布 　　B.4.1 正規分布 　　B.4.2 多変量正規分布 　　B.4.3 その他の一般的な分布 B.5 共役分布 B.6 参考文献
+
+付録 C 付録 C ベイジアンネットワークの覚書き C.1 ベイジアンネットワークとベイズ統計学

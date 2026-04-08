@@ -1,0 +1,94 @@
+---
+title: "Ch.10 自己組織化マップ"
+output: html_document
+date: "2023-12-24"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 自己組織化マップとは
+
+- コホネンにより提案されたニューラルネットワークアルゴリズムで、
+  高次元データを2次元平面上へ非線形射影するデータ解析方法
+
+- 自己組織化マップの基本構造は、入力層と出力層により構成された
+  2層のニューラルネットワーク
+
+# ケーススタディ
+
+## パッケージkohonenを使った結果
+```{r}
+library(kohonen)
+
+set.seed(10)
+gr <- somgrid(topo = "hexagonal", xdim = 10, ydim = 7)
+iris_som <- som(as.matrix(iris[, 1:4]), gr, rlen = 200)
+
+plot(iris_som, type = "codes")
+lab_cod <- as.numeric(iris[, 5])
+
+plot(iris_som, type = "mapping", labels = lab_cod, col = lab_cod)
+```
+
+`iris_som$grid` には `somgrid` で設定したユニットの座標値はじめ、出力画面の情報が格納される
+```{r}
+head(iris_som$grid$pts)
+```
+
+各ユニットに配置される個体の特徴となる
+```{r}
+head(iris_som$codes[[1]])
+```
+
+各個体の配属されるユニットは `iris_som$unit.classif` に格納される
+
+```{r}
+iris_som$unit.classif
+```
+
+
+
+## パッケージsom
+
+```{r, fig.width=10}
+library(som)
+set.seed(10)
+
+iris_nrm<- normalize(iris[, 1:4])
+
+iris_som2 <- som::som(iris_nrm, xdim = 6, ydim = 5)
+
+
+rand_n <- cbind(
+  rnorm(nrow(iris), 0, 0.13),
+  rnorm(nrow(iris), 0, 0.13)
+)
+
+out_new <- iris_som2$visual[, 1:2] + 0.5 + rand_n
+plot(iris_som2)
+```
+
+```{r, fig.width=10}
+plot(iris_som2)
+points(
+  out_new[, 1:2],
+  col = c(2:4)[unclass(iris[, 5])],
+  pch = c(1:3)[unclass(iris[, 5])]
+)
+
+```
+
+```{r}
+plot(
+  out_new[, 1:2],
+  col = c(2:4)[unclass(iris[, 5])],
+  pch = c(1:3)[unclass(iris[, 5])]
+)
+```
+
+```{r}
+
+```
+

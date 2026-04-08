@@ -1,0 +1,573 @@
+---
+title: "Ch.21 時系列分析"
+output: html_document
+date: "2024-01-05"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+lh
+```
+
+```{r}
+UKgas
+```
+```{r}
+start(UKgas)
+end(UKgas)
+frequency(UKgas)
+```
+
+```{r}
+op <- par(mfrow = c(2, 1), mar = c(4.5, 4, 1, 1))
+ts.plot(lh)
+ts.plot(UKgas)
+par(op)
+```
+
+```{r}
+ts.plot(
+  ldeaths, mdeaths, fdeaths, 
+  gpars = list(
+    xlab = "年",
+    ylab = "死亡数",
+    lty = c(1:3),
+    col = c(1:3)
+  ))
+legend(1977, 4000, c("全体", "男性", "女性"), lty = c(1:3), col = c(1:3))
+```
+
+
+```{r}
+
+ts.plot(
+  ldeaths, 
+  stats::lag(ldeaths, k = 5),
+  gpars = list(
+    xlab = "年",
+    ylab = "死亡数",
+    lty = c(1:2),
+    col = c(1:2)
+  ))
+legend(1978, 3950, c("全体", "全体 lag_k = 5"), lty = c(1:2), col = c(1:2))
+
+```
+```{r}
+ts.plot(UKgas)
+```
+
+```{r}
+plot(diff(UKgas))
+```
+
+# 自己共分散と自己相関
+```{r}
+acf(UKgas)
+```
+
+```{r}
+op <- par(mai = rep(0.25, 4), mfrow = c(4, 1))
+
+for (i in 1:4) {
+  plot(diff(log(UKgas), lag = i))
+  title(main = paste("lag:", i))
+}
+
+par(op)
+```
+
+```{r}
+ts.plot(mdeaths)
+acf(mdeaths)
+acf(UKgas)
+```
+
+```{r}
+ccf(mdeaths, fdeaths)
+ccf_val <- ccf(mdeaths, fdeaths)
+```
+
+```{r}
+ccf_val
+library(tidyverse)
+
+d_ccf <- data.frame(
+  mdeaths = as.numeric(mdeaths),
+  fdeaths = as.numeric(fdeaths)
+) %>% 
+  mutate(
+    fdeaths_lag1 = dplyr::lag(fdeaths, 1),
+    fdeaths_lag2 = dplyr::lag(fdeaths, 2),
+    fdeaths_lag3 = dplyr::lag(fdeaths, 3),
+    fdeaths_lag4 = dplyr::lag(fdeaths, 4),
+    
+    fdeaths_lead1 = dplyr::lead(fdeaths, 1),
+    fdeaths_lead2 = dplyr::lead(fdeaths, 2),
+    fdeaths_lead3 = dplyr::lead(fdeaths, 3),
+    fdeaths_lead4 = dplyr::lead(fdeaths, 4),
+  )
+
+
+cor(d_ccf$mdeaths, d_ccf$fdeaths_lag4, use = "complete.obs")
+cor(d_ccf$mdeaths, d_ccf$fdeaths_lag3, use = "complete.obs")
+cor(d_ccf$mdeaths, d_ccf$fdeaths_lag2, use = "complete.obs")
+cor(d_ccf$mdeaths, d_ccf$fdeaths_lag1, use = "complete.obs")
+cor(d_ccf$mdeaths, d_ccf$fdeaths)
+cor(d_ccf$mdeaths, d_ccf$fdeaths_lead1, use = "complete.obs")
+cor(d_ccf$mdeaths, d_ccf$fdeaths_lead2, use = "complete.obs")
+cor(d_ccf$mdeaths, d_ccf$fdeaths_lead3, use = "complete.obs")
+cor(d_ccf$mdeaths, d_ccf$fdeaths_lead4, use = "complete.obs")
+```
+
+```{r}
+# 相互相関関数を算出する関数です。
+calculate_ccf <- function(x0, y0, lag, significantLevel = 0.05) {
+  if (lag < 0) {
+    x <- head(x0, lag)
+    y <- tail(y0, lag)
+  } else if (lag > 0) {
+    x <- tail(x0, -lag)
+    y <- head(y0, -lag)
+  } else {
+    x <- x0
+    y <- y0
+  }
+  mux <- mean(x0)
+  muy <- mean(y0)
+  dx <- mean((x0 - mux)^2)
+  dy <- mean((y0 - muy)^2)
+  n <- length(x0)
+  cxy <- sum((x - mux) * (y - muy))/n
+  ccf <- cxy / sqrt(dx * dy)
+  upperCI <- qnorm((1 + (1 - significantLevel))/2)/sqrt(length(x0))
+  lowerCI <- -qnorm((1 + (1 - significantLevel))/2)/sqrt(length(x0))
+  return(data.frame(lag = lag, ccf = ccf, upperCI = upperCI, lowerCI = lowerCI))
+}
+```
+
+```{r}
+
+lag <- 1
+
+x0 <- as.numeric(mdeaths)
+y0 <- as.numeric(fdeaths)
+
+n  <- length(x0)
+mu_x <- mean(x0)
+mu_y <- mean(y0)
+
+dx <- mean((x0 - mu_x)^2)
+dy <- mean((y0 - mu_y)^2)
+
+if (lag < 0){
+  x <- head(x0, lag)
+  y <- tail(y0, lag)
+} else if (lag > 0) {
+  x <- tail(x0, -lag)
+  y <- head(y0, -lag)
+
+}
+
+cat("x0\n")
+x0
+cat("x\n")
+x
+
+cat("y0\n")
+y0
+cat("y\n")
+y
+
+# cxy <- sum((x - mu_x) * (y - mu_y)) / n
+cxy <- sum((x - mu_x) * (y - mu_y)) / n 
+
+ccf <- cxy / sqrt(dx * dy)
+ccf
+
+calculate_ccf(mdeaths, fdeaths, 1)
+calculate_ccf(mdeaths, fdeaths, 2)
+```
+0.7444
+0.736
+
+
+# スペクトル分析
+
+時系列データにはいくつかの成分が混合している
+時系列データに隠されている周期性を解析する方法として、
+スペクトル分析がある
+時系列における自己共分散がフーリエ変換が可能であるとき、
+
+$$
+p(f) = \dots = C_0 + 2  \sum^{+ \infty}_{k=1} C_k \cos 2\pi k f
+$$
+をパワースペクトル密度関数（スペクトル）と呼ぶ
+
+
+```{r}
+
+rep <- 10
+t <- 5 # f = 1/t
+n <- 1000
+
+x_dummy <- (rep * t) * (1:n) / n
+(n/(rep*t))
+y_dummy <- ts(3 * cos(2 * pi * x_dummy / t) + 1.5 * sin(2 * pi * x_dummy / t), start = 1, frequency = (n/(rep*t)))
+# y_dummy <- ts(cos(2 * pi * x_dummy / t))
+
+ts.plot(y_dummy)
+```
+
+```{r}
+# パラメータを指定
+A_vals     <- c(3, 2, 1)
+a_vals     <- c(1.5, -2, 3)
+alpha_vals <- c(0, 0, 0.5) * pi
+
+# 関数の数を設定
+fnc_num <- length(a_vals)
+
+# 変数(ラジアン)の範囲を指定
+theta_vec <- seq(from = -4*pi, to = 4*pi, length.out = 1000)
+
+# 関数ごとの曲線の座標を作成
+curve_each_df <- tidyr::expand_grid(
+  fnc_i = 1:fnc_num, # 関数番号
+  theta = theta_vec
+) |> # 関数ごとにラジアンを複製
+  tibble::tibble(
+  A     = A_vals[fnc_i], 
+  a     = a_vals[fnc_i], 
+  alpha = alpha_vals[fnc_i], 
+  f_t   = A * sin(a * theta + alpha)
+)
+
+curve_sum_df <- curve_each_df |> 
+  dplyr::summarise(
+    f_t = sum(f_t), .by = theta
+  )
+curve_sum_df
+
+
+ts.plot(ts(curve_sum_df$f_t))
+```
+```{r}
+res_spec <- spec.pgram(curve_sum_df$f_t, plot = TRUE)
+
+1 / res_spec$freq
+```
+
+
+横軸が $freq = 1 / T$であるため、
+
+
+```{r}
+op <- par(mfrow = c(2, 2), mar = c(5, 4, 4, 2))
+spec.pgram(UKgas)
+spec.pgram(UKgas, spans = c(3, 3))
+spec.pgram(ldeaths)
+spec.pgram(ldeaths, span = c(3, 3))
+par(op)
+```
+
+```{r}
+op <- par(mfrow = c(1, 2))
+stats::spectrum(UKgas, method = "pgram")
+stats::spectrum(UKgas, method = "ar")
+par(op)
+```
+
+```{r}
+op <- par(mfrow = c(1, 2))
+stats::spectrum(UKgas, method = "pgram")
+stats::spectrum(ldeaths, method = "pgram")
+par(op)
+
+op <- par(mfrow = c(1, 2))
+spec.pgram(UKgas)
+spec.pgram(ldeaths)
+par(op)
+```
+
+# ランダムウォークと単位根
+
+$$
+y_t = \alpha y_{t-1} + e_t
+$$
+$|\alpha| = 1$ （単位根）である場合、ランダムウォークといい、非定常な時系列である
+時系列データがランダムウォークかどうかを検定するのことを単位根検定とよぶ
+
+`PP.test()`: 帰無仮説は単位根過程をもつ、対立仮説は単位根過程をもたない
+null hypothesis that x has a unit root against a stationary alternative.
+```{r}
+PP.test(lh)
+```
+P値が0.03であるため、帰無仮説は棄却され、 `lh`は単位根過程を持たないと考えられる
+
+
+単位根検定は `PP.test()`以外にも
+- tseries::adf.test()
+- fSeries::adfTest(), unitrootTest() 
+などがある
+```{r}
+library(tseries)
+adf.test(UKgas)
+```
+
+```{r}
+adf.test(diff(UKgas))
+```
+# MAモデル
+```{r}
+ma(lh, order = 12)
+```
+
+# ARモデル
+## ARモデルの推定
+```{r}
+lh_ar <- ar(lh)
+lh_ar
+lh_ar$order
+
+# print coeff
+round(lh_ar$ar, 3)
+```
+
+$$
+\hat{y}_t = 0.6534 y_{t-1} - 0.064 y_{t-2} - 0.227 y_{t-3}
+$$
+
+```{r}
+summary(lh_ar)
+```
+
+## モデル診断
+
+`Box.test()`を用いると、各残差間の独立性を検定することができる
+```{r}
+Box.test(lh_ar$resid, type = "Ljung-Box")
+Box.test(lh_ar$resid, type = "Box-Pierce")
+```
+
+また、残差分布の正規性の検定に関しては`tseries::jarque.bera.test()`を用いて行う
+欠損値があるとエラーを返すので、その分を除去したうえで、検定を行う
+```{r}
+lh_ar_resid <- window(lh_ar$resid, start = 4)
+jarque.bera.test(lh_ar_resid)
+```
+また、`qqnorm()`を用いて検証行うこともある
+```{r}
+qqnorm(tmp)
+```
+
+## 予測
+```{r}
+(lh_pred <- predict(lh_ar, n.ahead = 10))
+```
+
+```{r}
+se1 <- lh_pred$pred + 2 * lh_pred$se
+se2 <- lh_pred$pred - 2 * lh_pred$se
+
+ts.plot(
+  lh,
+  lh_pred$pred,
+  se1,
+  se2,
+  gpars = list(
+    lt  = c(1, 2, 2, 3),
+    col = c(1, 2, 4, 4)
+  )
+)
+legend(0, 3.3, c("obs", "pred", "2*SE"), lty = c(1, 2, 3), col = c(1, 2, 4))
+```
+
+# ARMA / ARIMAモデル
+```{r}
+lh_arima <- arima(lh, order = c(2, 0, 1))
+lh_arima
+```
+
+
+$$
+y_t = 2.3946 + 1.1765 y_{t-1} + 0.5044 y_{t-2} - 0.508 e_{t-1} + e_t
+$$
+```{r}
+plot(
+  forecast(lh_arima, level = c(50,95), h = 5),
+  shadecols=c("yellow", "orange"),
+  fcol=1,
+  lwd=2
+)
+```
+
+```{r}
+summary(lh_arima)
+```
+## モデルの選択
+
+```{r}
+library(forecast)
+fit <- auto.arima(lh, ic = "aic")
+arimaorder(fit)
+```
+```{r}
+tsdiag(fit, gof.lag = 12)
+```
+
+
+## ARFIMAモデル
+
+ARIMAモデルは差分が大きくなりすぎる傾向があるので、その短所を補うために
+差分の部分を整数から実数に一般化した方法が
+ARFIMAモデルと呼ぶ（Autoregressive Fractionally Integrated Moving Average）
+
+ステップとしては
+1. `fdGPH()`関数でまず差分パラメーター$d$を求める
+2. ついで、`fracdiff()`関数でモデルを推定する
+
+```{r}
+library(fracdiff)
+ap_d <- fdGPH(AirPassengers)$d
+ap_d
+
+ap_frac <- fracdiff(AirPassengers, nar = 3, dtol = ap_d, nma = 1)
+summary(ap_frac)
+```
+
+
+## GARCHモデル
+時系列データが条件付き平均 $g_t$, 条件付き分散 $h_t$ の正規分布$N(g_t, h_t)$に従うとし、
+$h_t$ の変動が下記の数式に従うとすると、
+自己回帰条件付き分散不均一モデル(Autoregressive Conditional Heteroscedastic)、通称ARCHモデルと呼ぶ
+
+
+$$
+h_t = \omega + \sum^q_{i=1} \alpha_i e^2_{t-i}
+$$
+
+さらに下記のように拡張したモデルをGARCHモデルと呼ぶ
+$$
+h_t = \omega + \sum^q_{i=1} \alpha_i e^2_{t-i} + \sum^r_{j=1} \beta h_{t-j}
+$$
+他にも
+- TGARCHモデル(Threshold GARCH):分散の非対称性を表すモデル
+- APARCHモデル(Asymmetric Power ARCH):GARCHとTGARCHを結合したモデル
+
+```{r}
+library(fGarch)
+
+ukgas_diff <- diff(UKgas)
+
+ukgas_garch <- garchFit(formula = ~ arma(1, 1) + garch(1, 1), data = ukgas_diff, trace = FALSE)
+summary(ukgas_garch)
+```
+
+`garchFit()`を用いて、ARMA-GRACHモデルをあてはめる
+関数diffで差分を取り、トレンドを除く、
+関数`garchFit()`では、
+条件付き平均 $g_t$のARMAモデルを`formula.mean` で指定する
+条件付き分散 $h_t$のGARCHモデルを`formula.var`で指定する
+
+- formula:
+  formula object describing the mean and variance equation of the ARMA-GARCH/APARCH model. 
+  A pure GARCH(1,1) model is selected e.g., for formula = ~garch(1,1). 
+  To specify an ARMA(2,1)-APARCH(1,1) process, use ~ arma(2,1) + aparch(1,1).
+
+上記の結果を数式にすると
+
+
+$$
+\begin{align}
+y_t &= 2.273 + 0.159 y_{t-1} + 0.904 e_{t-1} + e_t \\
+h_t &= 173.934 + 0.366 e^2_{t-1} + 0.679 h_{t-1}
+\end{align}
+$$
+
+$$
+\begin{align}
+y_t &= \mu + ar_1 y_{t-1} + ma_1 e_{t-1} + e_t \\
+h_t &= \omega + \alpha_1 e^2_{t-1} + \beta_1 h_{t-1}
+\end{align}
+$$
+
+
+```{r}
+cat("infomation criteria\n")
+ukgas_garch@fit$ics
+cat("residuals\n")
+ukgas_garch@residuals
+cat("fitted value\n")
+ukgas_garch@fitted
+```
+
+```{r}
+plot(ukgas_garch)
+```
+```{r}
+ukgas_fit <- ts(fitted(ukgas_garch), start = c(1960, 2), frequency = 4)
+ts.plot(ukgas_diff, ukgas_fit, lty = c(1, 2), col = c(1, 2))
+legend(1962, 400, c("diff", "pred diff"), lty = c(1, 2), col = c(1, 2))
+```
+
+# 成分の分解
+```{r}
+plot(stl(UKgas, s.window = "per"))
+```
+
+# 多変量時系列
+
+```{r}
+data("USeconomic")
+
+us_eco_diff <- diff(USeconomic[, 1:2])
+ts.plot(us_eco_diff, lty = c(1, 2), col = c(1, 2))
+legend(1955, -0.02, c(colnames(us_eco_diff)[1], colnames(us_eco_diff)[2]), lty = c(1, 2), col = c(1, 2))
+```
+```{r}
+ccf(us_eco_diff[, 1], us_eco_diff[, 2], main = "diff log(M1) & diff log(GNP)")
+```
+```{r}
+us_var <- ar(us_eco_diff, order.max = 2, aic = FALSE)
+us_var
+
+plot(us_var)
+plot(us_var$resid)
+```
+
+$$
+\begin{align}
+M_t &= 0.545 M_{t-1} + 0.123 M_{t-2} - 0.189 G_{t-1} + 0.045 G{t-2} + E_t\\
+G_t &= 0.198 M_{t-1} + 0.137 M_{t-2} - 0.130 G_{t-1} + 0.071 G{t-2} + E_t
+\end{align}
+$$
+
+
+
+```{r}
+us_pred <- predict(us_var, n.ahead = 12, se.fit = FALSE)
+
+ts.plot(us_eco_diff, lty = c(1, 2), col = c(1, 2))
+ts.plot(us_pred)
+ts.plot(us_eco_diff, us_pred, lty = c(1, 2), col = c(1, 2))
+```
+
+
+# カオス時系列
+
+```{r}
+
+```
+
+# 補遺
+- `its`パッケージ
+- `fracdiff`パッケージは長期記憶時系列モデル
+- `tsfa` 時系列因子分析
+- `boot` 時系列のブートストラップ `tsboot`
+- `dynlm` ダイナミックな時系列データの回帰関数 `dynlm`
+- `pastecs` 時空間データ解析パッケージ `tsd` , `decdiff`, `deccensus`
+- `timsac`

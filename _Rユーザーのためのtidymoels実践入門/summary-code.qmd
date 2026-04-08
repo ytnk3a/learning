@@ -1,0 +1,481 @@
+---
+title: "Rユーザのためのtidymodels: Summary Code"
+format: html
+editor: source
+---
+
+```{r}
+library(tidyverse)
+library(yardstick)
+library(tune)
+library(dials)
+library(parsnip)
+library(rsample)
+library(modeldata)
+library(workflows)
+library(recipes)
+library(workflowsets)
+```
+
+# 1. データセットの整理
+
+## Split Train data and Test data
+
+```{r}
+d_raw <- ames
+d_raw
+
+set.seed(123)
+d_split <- initial_split(data = d_raw, prop = 0.80) # prop default: 0.75
+class(d_split)
+
+d_train <- training(d_split)
+d_test <- testing(d_split)
+
+eq_formula <- as.formula(Sale_Price ~ .)
+```
+
+## Normal Workflow
+
+```{r}
+# --- set recipe for modeling data
+recipe_01 <- recipe(eq_formula,  data = d_train) %>% 
+  step_log(all_outcomes(), base = 10, skip = TRUE) %>%  # 対数変換
+  step_YeoJohnson(Lot_Area, Gr_Liv_Area) %>%            # Yeo-Johnson変換
+  step_other(Neighborhood, threshold = 0.1) %>%         # 頻度少ないのをOtherに
+  step_zv(all_predictors())        
+
+# -- model set 
+rf_model <- rand_forest(
+  trees = 50,
+  mtry = 3
+) %>% 
+  set_engine("ranger", seed = 71) %>% 
+  set_mode("regression")
+
+# --- bake for train data
+d_train_prep_01 <- recipe_01 %>% 
+  prep() %>% 
+  bake(new_data = NULL)
+
+d_test_prep_01 <- recipe_01 %>% 
+  prep() %>% 
+  bake(new_data = d_test)
+
+# --- set workflow
+workflow_rf <- workflow() %>% 
+  add_recipe(recipe_01) %>% 
+  add_model(spec = rf_model)
+
+fit_rf <- workflow_rf %>% 
+  fit(data = d_train)
+
+fit_rf %>% 
+  predict(new_data = d_test)
+
+d_predict <- augment(fit_rf, new_data = d_test) %>% 
+  mutate(Sale_Price_log = log(Sale_Price, base = 10))
+
+ggplot() +
+  geom_line(aes(x = Sale_Price_log, y = Sale_Price_log), data = d_predict) +
+  geom_point(aes(x = Sale_Price_log, y = .pred), data = d_predict, alpha = 0.5) +
+  labs(
+    y = "Prediction",
+    x = "Sale Price"
+  ) +
+  coord_equal()
+  
+valid_metrics <- metric_set(rmse, rsq, mae, mpe, mape)
+
+d_predict %>% 
+  valid_metrics(truth = Sale_Price_log, estimate = .pred)
+
+```
+
+# 回帰分析の結果をtidymodelsを使って書いてみる
+
+## Normal WF
+
+```{r}
+lm_formula <- as.formula(Sale_Price ~ Garage_Area + Lot_Area + Gr_Liv_Area)
+
+# --- set recipe for modeling data
+recipe_01 <- recipe(lm_formula,  data = d_train) %>% 
+  step_log(all_outcomes(), base = 10, skip = TRUE) %>%  # 対数変換
+  step_YeoJohnson(Lot_Area, Gr_Liv_Area) %>%            # Yeo-Johnson変換
+  step_zv(all_predictors())        
+
+lm_mod <- linear_reg() %>% 
+  set_mode("regression") %>% 
+  set_engine("lm") 
+
+# # --- bake for train data
+# d_train_prep_01 <- recipe_01 %>% 
+#   prep() %>% 
+#   bake(new_data = NULL)
+# 
+# d_test_prep_01 <- recipe_01 %>% 
+#   prep() %>% 
+#   bake(new_data = d_test)
+# 
+# lm_fit <- lm_mod %>%
+#   fit(lm_formula, data = d_train)
+# 
+# --- use workflow 
+lm_wf <- workflow() %>% 
+  add_recipe(recipe_01) %>% 
+  add_model(spec = lm_mod)
+
+lm_fit <- lm_wf %>% 
+  fit(data = d_train)
+
+# ---
+
+summary(lm_fit$fit)
+
+d_test_res <- lm_fit %>% 
+  predict(new_data = d_test) %>% 
+  bind_cols(d_test) %>% 
+  mutate(Sale_Price_log10 = log(Sale_Price, base = 10))
+
+lm_metrics <- metric_set(rmse, rsq, mae, mpe, mape)
+
+d_test_res %>% 
+  lm_metrics(truth = Sale_Price_log10, estimate = .pred)
+
+ggplot() +
+  geom_line(aes(x = Sale_Price_log10, y = Sale_Price_log10), data = d_test_res) +
+  geom_point(aes(x = Sale_Price_log10, y = .pred), data = d_test_res, alpha = 0.5) +
+  labs(
+    y = "Pred",
+    x = "Sale Price"
+  ) +
+  coord_obs_pred()
+
+```
+
+## CV WF
+
+```{r}
+set.seed(123)
+
+folds <- vfold_cv(d_train, v = 10, strata = Sale_Price)
+keep_pred <- control_resamples(save_pred = TRUE, save_workflow = TRUE)
+
+lm_fit_fold <- lm_wf %>% 
+  fit_resamples(resamples = folds, control = keep_pred)
+
+lm_fit_fold
+collect_metrics(lm_fit_fold)
+
+show_best(lm_fit_fold, metric = "rmse")
+```
+
+## tune WF in Lasso
+
+```{r}
+lm_mod <- linear_reg(
+  mixture = tune::tune(), 
+  penalty = tune::tune()
+) %>% 
+  set_mode("regression") %>% 
+  set_engine("glmnet") 
+
+lm_params <- list(
+  mixture(),
+  penalty() %>% 
+    finalize(recipe_01 %>% prep() %>% bake(new_data = NULL) %>% select(!Sale_Price))
+  ) %>% 
+  parameters()
+
+lm_wf <- workflow() %>% 
+  add_recipe(recipe_01) %>% 
+  add_model(spec = lm_mod)
+
+lm_grid_range <- lm_params %>% 
+  grid_random(size = 5)
+
+lm_grid_range
+
+lm_grid <- lm_wf %>% 
+  tune_grid(
+    resamples = folds,
+    grid = lm_grid_range,
+    control = control_grid(save_pred = TRUE),
+    metrics = metric_set(rmse)
+  )
+
+autoplot(lm_grid)
+
+lm_grid_best <- lm_grid %>% 
+  show_best()
+
+lm_grid_best
+
+lm_model_best <- linear_reg(
+  mixture = lm_grid_best$mixture[1],
+  penalty = lm_grid_best$penalty[1]
+) %>% 
+  set_engine("glmnet", seed = 71) %>% 
+  set_mode("regression")
+
+lm_wf_last <- lm_wf %>% 
+  update_model(lm_model_best)
+
+
+lm_last_fit <- lm_wf_last %>% 
+  last_fit(d_split)
+
+last_rmse <- lm_last_fit %>% 
+  collect_metrics()
+
+last_rmse
+
+```
+
+# 決定木の結果をtidymodelsを使って書いてみる outputまで
+
+```{r}
+dtree_formula <- as.formula(Sale_Price ~ Garage_Area + Lot_Area + Gr_Liv_Area)
+
+# --- set recipe for modeling data
+recipe_01 <- recipe(dtree_formula,  data = d_train) %>% 
+  step_log(all_outcomes(), base = 10, skip = TRUE) %>%  # 対数変換
+  step_YeoJohnson(Lot_Area, Gr_Liv_Area) %>%            # Yeo-Johnson変換
+  step_zv(all_predictors())        
+
+dtree_mod <- decision_tree() %>% 
+  set_mode("regression") %>% 
+  set_engine("rpart") %>% 
+  set_args(model = TRUE) # necessary for partykit plot
+
+# --- use workflow 
+dtree_wf <- workflow() %>% 
+  add_recipe(recipe_01) %>% 
+  add_model(spec = dtree_mod) %>% 
+  fit(data = d_train)
+
+dtree_fit <- dtree_wf %>% 
+  pull_workflow_fit()
+
+
+library(partykit)
+plot(as.party(dtree_fit$fit))
+plot(nodeprune(as.party(dtree_fit$fit), ids = 2))
+
+```
+
+[Tidymodelsをシンプルに使う - bob3’s blog](https://bob3.hatenablog.com/entry/2023/04/15/214755) \> rpartのモデルに「\|\> set_args(model=TRUE)」を追加したので、描けるようになりました
+
+-   tidymodels, bonsai: Setting partykit::ctree parameters: mincriterion (the significance level), ... https://stackoverflow.com/questions/73525374/tidymodels-bonsai-setting-partykitctree-parameters-mincriterion-the-signif にあるように、`set_engine("partykit")`にすれば、`model=TRUE`を入れずともplotできるかと思ったが、 うまく可視化されない。結果のclassがpartyが入ってないからか
+
+```{r}
+library(bonsai)
+dtree_mod_kit <- decision_tree() %>% 
+  set_mode("regression") %>% 
+  set_engine("partykit")
+
+# --- use workflow 
+dtree_kit_wf <- workflow() %>% 
+  add_recipe(recipe_01) %>% 
+  add_model(spec = dtree_mod_kit) %>% 
+  fit(data = d_train)
+
+dtree_kit_fit <- dtree_kit_wf %>% 
+  pull_workflow_fit()
+
+```
+
+# 回帰分析と決定木のどちらがいいかをworkflowsetsを使って書いてみる
+
+```{r}
+workflow_set(
+  preproc = list(base = rec_base),
+  models  = list(
+    lm         = lm_spec,
+    reglarized = regularized_spec
+  ),
+  cross = FALSE
+)
+```
+
+# 複数のモデルをトライ leave var out
+
+```{r}
+set.seed(123)
+
+penguins_split <- initial_split(penguins, strata = species)
+
+penguins_train <- training(penguins_split)
+penguins_test  <- testing(penguins_split)
+
+set.seed(123)
+folds <- penguins_train %>% 
+  vfold_cv(v = 10, strata = species)
+
+formulas <- leave_var_out_formulas(
+  sex ~ ., 
+  data = penguins,
+  full_model = TRUE
+)
+
+formulas
+
+lr_spec <- logistic_reg() %>% 
+  set_engine("glm")
+
+lm_spec <- linear_reg() %>% 
+  set_engine("lm")
+
+penguins_wf <- workflow_set(
+  preproc = formulas,
+  models = list(logistic = lr_spec),
+  cross = FALSE
+)
+
+penguins_fit <- penguins_wf %>% 
+  workflow_map(
+    fn = "fit_resamples",
+    resamples = folds,
+    seed = 123
+  )
+
+penguins_fit %>% 
+  rank_results()
+
+penguins_fit
+
+extract_workflow(penguins_wf, id = "island_logistic")
+
+```
+
+# 複数レシピと複数モデルをworkflowsetで試す
+
+```{r}
+
+folds <- vfold_cv(d_train, v = 10)
+lm_formula <- as.formula(Sale_Price ~ Garage_Area + Lot_Area + Gr_Liv_Area)
+
+# --- set recipe for modeling data
+rec_base <- recipe(lm_formula,  data = d_train) %>% 
+  step_log(all_outcomes(), base = 10, skip = TRUE) %>%  # 対数変換
+  step_YeoJohnson(Lot_Area, Gr_Liv_Area) %>%            # Yeo-Johnson変換
+  step_zv(all_predictors())
+
+rec_pca <- recipe_01 %>%
+  step_pca(all_numeric_predictors(), num_comp = tune()) 
+  
+rec_cor_filter <- recipe_01 %>% 
+  step_corr(all_numeric_predictors(), threshold = tune())
+
+lm_spec <- linear_reg() %>% 
+  set_mode("regression") %>% 
+  set_engine("lm") 
+
+regularized_spec <- linear_reg(penalty = tune(), mixture = tune()) %>% 
+  set_engine("glmnet")
+
+chi_models <- workflow_set(
+  preproc = list(
+    simple = rec_base,
+    filter = rec_cor_filter,
+    pca    = rec_pca
+  ),
+  models = list(
+    lm         = lm_spec,
+    reglarized = regularized_spec
+  ),
+  cross = TRUE
+)
+
+
+chi_models <- chi_models %>% 
+  workflow_map(
+    fn = "tune_grid",
+    resamples = folds,
+    grid = 10,
+    metrics = metric_set(rmse),
+    verbose = FALSE
+  )
+
+chi_models
+
+```
+
+# 判別分析の結果をtidymodelsを使って書いてみる
+
+```{r}
+bivariate_train
+
+log_formula <- as.formula(Class ~ A + B)
+log_mod <- logistic_reg() %>% 
+  set_mode("classification") %>% 
+  set_engine("glm")
+
+# --- set recipe for modeling data
+recipe_01 <- recipe(log_formula,  data = bivariate_train)
+
+# --- use workflow 
+log_wf <- workflow() %>% 
+  add_recipe(recipe_01) %>% 
+  add_model(spec = log_mod)
+
+log_fit <- log_wf %>% 
+  fit(data = bivariate_train)
+
+log_fit
+
+d_res <- log_fit %>% 
+  predict(new_data = bivariate_train) %>% 
+  bind_cols(bivariate_train) 
+
+f_meas(d_res, Class, .pred_class, event_level = "second") 
+
+d_res %>% 
+  conf_mat(truth = Class, estimate = .pred_class) %>% 
+  autoplot(type = "mosaic")
+
+d_res %>% 
+  conf_mat(truth = Class, estimate = .pred_class) %>% 
+  autoplot(type = "heatmap")
+
+d_res_prob <- log_fit %>% 
+  predict(new_data = bivariate_train, type = "prob") %>% 
+  bind_cols(bivariate_train) 
+
+roc_curve(d_res_prob, Class, .pred_One) %>% 
+  autoplot()
+
+pr_curve(d_res_prob, Class, .pred_One) %>% 
+  autoplot()
+
+gain_curve(d_res_prob, Class, .pred_One) %>% 
+  autoplot()
+
+lift_curve(d_res_prob, Class, .pred_One) %>% 
+  autoplot()
+
+
+```
+
+-   混合行列をもとにした評価指標
+-   感度(Senstivity)
+-   再現率（Recall)
+-   特異度（Specificity）: 新陰性率（True Negative Rate: TNR）: True Negative / (False Postive + True Negative)
+-   適合率（Precision）:陽性的中率(Positive Predictive Value: PPV): TP / (TP + FP)
+-   陰性的中率（Negative Predictive Value）: TN / TN + FN
+-   F値(F1-Score, F1-measure): (1+1\^2) Precision x Recall/((1\^2 x Precision) + Recall)
+-   Fbeta: (1+beta\^2) Precision x Recall/((beta\^2 x Precision) + Recall) 適合率と再現率の重みを調査平均で計算したものと、重み調整するF_beta
+-   ROC: Receiver Operating Characteristic; ROC 0\~1での予測モデルの場合、閾値の設定によって、予測精度は変わるが、閾値を変えた場合、 感度がどう変わるかの関係を描画したものが、ROC曲線であるため、左上に線が引かれたモデルの方が精度は高まる
+-   ROC AUC ROC Area Under Curve
+-   クラスに不均衡がある場合はROCは機能しないため、PR曲線を使うべき(Precision Recall Curve)
+-   これは閾値の変化で、RecallとPrecisionがどう変わるかを見る曲線で、右上にあるほど性能が高い
+-   不均衡なデータではNegativeが多いため、すべてをNegativeと予測しても、高いと評価されるが、PR曲線はPositiveに対する予測も評価
+-   PR AUCがあり、1に近いほど精度が高い
+-   累積ゲイン曲線: 予測された確率がある数値以上であれば、全データの何割の陽性を含んでいるかを計算
+-   横軸がデータ全体に対する予測確率の高い上位からの割合（% Tested 25 -\> 上位25%のデータセット）
+-   縦軸が真陽性率（累積ゲイン）(%Found 50 -\> 50%の陽性が含まれている)
+-   この図だと、上位85%の顧客までに100%の陽性が入っているということ
+-   リフト曲線: 単純なモデルに比べて何倍精度が高いか
+-   上位N%のデータだと、単純なモデルに比べて何倍精度が高いかをプロット
+-   評価対象のクラスは因子型の1つ目であるので、それを変更したい場合は`event_level`で変更可能

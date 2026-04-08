@@ -1,0 +1,409 @@
+---
+title: "Ch.04: モデルの運用"
+format: html
+editor: source
+---
+
+## 4-1　workflowsパッケージによるレシピやモデル，データの変更
+```{r}
+library(tidyverse)
+library(yardstick)
+library(tune)
+library(parsnip)
+library(rsample)
+library(modeldata)
+library(recipes)
+library(workflows)
+data("ames", package = "modeldata")
+
+
+```
+### workflowsを使わないモデル作成
+
+```{r}
+
+# -- data 
+set.seed(123)
+split_ames_df <- initial_split(ames, strata = "Sale_Price")
+
+ames_train <- training(split_ames_df)
+ames_test  <- testing(split_ames_df)
+
+# -- data set for model
+ames_rec <- recipe(Sale_Price ~ .,  data = ames_train) %>% 
+  step_log(all_outcomes(), base = 10, skip = TRUE) %>%  # 対数変換
+  step_YeoJohnson(Lot_Area, Gr_Liv_Area) %>%            # Yeo-Johnson変換
+  step_other(Neighborhood, threshold = 0.1) %>%         # 頻度少ないのをOtherに
+  step_zv(all_predictors())                             # 一意の値しか持たないもの（分散0）を除外
+
+# -- model set
+rf_model <- rand_forest(
+  trees = 50,
+  mtry = 3
+) %>% 
+  set_engine("ranger", seed = 71) %>% 
+  set_mode("regression")
+
+# -- modeling
+ames_rec_preped <- ames_rec %>% 
+  prep()
+
+ames_rf_fit <- rf_model %>% 
+  fit(Sale_Price ~ ., data = bake(ames_rec_preped, new_data = NULL))
+
+# --- validation check
+predict(ames_rf_fit, new_data = bake(ames_rec_preped, new_data = ames_test))
+
+ames_test_res <- predict(ames_rf_fit, new_data = bake(ames_rec_preped, new_data = ames_test)) %>% 
+  bind_cols(ames_test) %>% 
+  mutate(obs_log = log10(Sale_Price))
+
+ggplot() +
+  geom_line(aes(x = obs_log, y = obs_log), data = ames_test_res) +
+  geom_point(aes(x = obs_log, y = .pred), data = ames_test_res, alpha = 0.5) +
+  labs(
+    y = "Prediction",
+    x = "Sale Price"
+  ) +
+  coord_equal()
+  # coord_obs_pred()
+
+ames_metrics <- metric_set(rmse, rsq, mae, mpe, mape)
+
+ames_metrics %>% class()
+ames_metrics %>% args()
+
+ames_test_res %>% 
+  ames_metrics(truth = obs_log, estimate = .pred)
+```
+
+
+### workflowsを使うモデル作成
+```{r}
+# -- data set for model
+ames_rec <- recipe(Sale_Price ~ .,  data = ames_train) %>% 
+  step_log(all_outcomes(), base = 10, skip = TRUE) %>%  # 対数変換
+  step_YeoJohnson(Lot_Area, Gr_Liv_Area) %>%            # Yeo-Johnson変換
+  step_other(Neighborhood, threshold = 0.1) %>%         # 頻度少ないのをOtherに
+  step_zv(all_predictors())        
+
+# -- model set
+rf_model <- rand_forest(
+  trees = 50,
+  mtry = 3
+) %>% 
+  set_engine("ranger", seed = 71) %>% 
+  set_mode("regression")
+
+# --- set workflow
+ames_wf <- workflow() %>% 
+  add_recipe(ames_rec) %>% 
+  add_model(spec = rf_model)
+
+# - or 
+# ames_wf <- workflow(preprocessor = ames_rec, spec = rf_model)
+
+class(ames_wf)
+
+ames_wf
+```
+```{r}
+rf_fit <- ames_wf %>% 
+  fit(data = ames_train)
+
+rf_fit
+```
+
+
+```{r}
+rf_fit %>% 
+  extract_recipe()
+rf_fit %>% 
+  extract_fit_parsnip()
+```
+
+```{r}
+rf_fit %>% 
+  predict(new_data = ames_test)
+```
+
+```{r}
+df_ames_predict <- augment(rf_fit, new_data = ames_test)
+
+df_ames_predict %>% 
+  transmute(Sale_Price_log = log(Sale_Price, base = 10), .pred) %>% 
+  rmse(Sale_Price_log, .pred)
+```
+
+```{r}
+# -- data set for model
+ames_rec <- recipe(Sale_Price ~ .,  data = ames_train) %>% 
+  step_log(all_outcomes(), base = 10, skip = TRUE) %>%  # 対数変換
+  step_YeoJohnson(Lot_Area, Gr_Liv_Area) %>%            # Yeo-Johnson変換
+  step_other(Neighborhood, threshold = 0.1) %>%         # 頻度少ないのをOtherに
+  step_zv(all_predictors())        
+
+# -- model set
+rf_model <- rand_forest(
+  trees = 50,
+  mtry = 3
+) %>% 
+  set_engine("ranger", seed = 71) %>% 
+  set_mode("regression")
+
+# --- set workflow
+ames_wf <- workflow() %>% 
+  add_recipe(ames_rec) %>% 
+  add_model(spec = rf_model)
+
+rf_fit <- ames_wf %>% 
+  fit(data = ames_train)
+
+rf_fit %>% 
+  predict(new_data = ames_test)
+
+df_ames_predict <- augment(rf_fit, new_data = ames_test) %>% 
+  mutate(Sale_Price_log = log(Sale_Price, base = 10))
+
+ggplot() +
+  geom_line(aes(x = Sale_Price_log, y = Sale_Price_log), data = df_ames_predict) +
+  geom_point(aes(x = Sale_Price_log, y = .pred), data = df_ames_predict, alpha = 0.5) +
+  labs(
+    y = "Prediction",
+    x = "Sale Price"
+  ) +
+  coord_equal()
+  
+ames_metrics <- metric_set(rmse, rsq, mae, mpe, mape)
+
+df_ames_predict %>% 
+  ames_metrics(truth = Sale_Price_log, estimate = .pred)
+
+```
+
+### モデルの改善に使う関数
+```{r}
+lm_model <- linear_reg() %>% 
+  set_engine("lm")
+
+lm_wf <- ames_wf %>% 
+  update_model(lm_model)
+
+ames_wf
+
+lm_wf
+```
+
+```{r}
+lm_wf %>% 
+  remove_recipe()
+
+lm_wf <- lm_wf %>% 
+  remove_recipe() %>% 
+  add_variables(
+    outcomes = Sale_Price,
+    predictors = c(Longitude, Latitude)
+  )
+
+lm_wf
+```
+```{r}
+lm_fit <- 
+  fit(lm_wf, ames_train)
+
+predict(lm_fit, ames_test)
+
+augment(lm_fit, ames_test) %>% 
+  rmse(Sale_Price, .pred)
+```
+
+
+
+```{r}
+set.seed(123)
+
+folds <- ames_train %>% 
+  vfold_cv(v = 10, strata = Sale_Price)
+
+folds
+```
+```{r}
+keep_pred <- control_resamples(save_pred = TRUE, save_workflow = TRUE)
+
+wf_fit_fold <- ames_wf %>% 
+  fit_resamples(resamples = folds, control = keep_pred)
+
+wf_fit_fold
+
+collect_metrics(wf_fit_fold)
+
+show_best(wf_fit_fold, metric = "rmse")
+```
+## 4-2　workflowsetsパッケージによる複数レシピ・モデルの一元管理
+```{r}
+library(workflowsets)
+penguins
+```
+```{r}
+set.seed(123)
+
+penguins_split <- initial_split(penguins, strata = species)
+
+penguins_train <- training(penguins_split)
+penguins_test  <- testing(penguins_split)
+
+set.seed(123)
+folds <- penguins_train %>% 
+  vfold_cv(v = 10, strata = species)
+
+formulas <- leave_var_out_formulas(
+  sex ~ ., 
+  data = penguins,
+  full_model = TRUE
+)
+
+formulas
+formulas[["species"]]
+```
+  
+```{r}
+lr_spec <- logistic_reg() %>% 
+  set_engine("glm")
+
+lm_spec <- linear_reg() %>% 
+  set_engine("lm")
+
+penguins_wf <- workflow_set(
+  preproc = formulas,
+  models = list(logistic = lr_spec),
+  cross = FALSE
+)
+
+penguins_wf
+
+workflow_set(
+  preproc = formulas,
+  models = list(logistic = lr_spec, linear = lm_spec),
+  cross = TRUE
+)
+
+```
+
+```{r}
+penguins_fit <- penguins_wf %>% 
+  workflow_map(
+    fn = "fit_resamples",
+    resamples = folds,
+    seed = 123
+  )
+
+penguins_fit
+```
+
+```{r}
+penguins_fit %>% 
+  rank_results()
+```
+
+```{r}
+penguins_fit %>% 
+  autoplot(metric = "accuracy") +
+  guides(color = "none", shape = "none")
+```
+
+```{r}
+extract_workflow(penguins_wf, id = "island_logistic")
+```
+
+```{r}
+Chicago1 <- Chicago %>% 
+  head(365)
+```
+```{r}
+base_recipe <- recipe(ridership ~ ., data = Chicago1) %>% 
+  step_date(date) %>% 
+  step_holiday(date) %>% 
+  update_role(date, new_role = "id") %>% 
+  step_dummy(all_nominal()) %>% 
+  step_zv(all_predictors()) %>% 
+  step_normalize(all_predictors())
+```
+```{r}
+filter_rec <- base_recipe %>% 
+  step_corr(all_of(stations), threshold = tune())
+
+pca_rec <- base_recipe %>% 
+  step_pca(all_of(stations), num_comp = tune()) %>% 
+  step_normalize(all_predictors())
+
+regularized_spec <- linear_reg(penalty = tune(), mixture = tune()) %>% 
+  set_engine("glmnet")
+
+cart_spec <- decision_tree(cost_complexity = tune(), min_n = tune()) %>% 
+  set_engine("rpart") %>% 
+  set_mode("regression")
+
+knn_spec <- nearest_neighbor(neighbors = tune(), weight_func = tune()) %>% 
+  set_engine("kknn") %>% 
+  set_mode("regression")
+
+chi_models <- workflow_set(
+  preproc = list(
+    simple = base_recipe,
+    filter = filter_rec,
+    pca = pca_rec
+  ),
+  models = list(
+    glmnet = regularized_spec,
+    cart   = cart_spec,
+    knn    = knn_spec
+  ),
+  cross = TRUE
+)
+
+chi_models
+```
+
+```{r}
+splits <- sliding_period(
+  Chicago1,
+  index = date,
+  period = "day",
+  lookback = 300,
+  assess_stop = 7,
+  step = 7
+)
+
+splits
+```
+```{r}
+set.seed(123)
+
+chi_models <- chi_models %>% 
+  workflow_map(
+    fn = "tune_grid",
+    resamples = splits,
+    grid = 10,
+    metrics = metric_set(rmse),
+    verbose = FALSE
+  )
+
+chi_models
+```
+```{r}
+chi_models %>% 
+  rank_results(
+    rank_metric = "rmse",
+    select_best = TRUE
+  ) %>% 
+  select(rank, mean, model, wflow_id, .config)
+
+autoplot(chi_models, select_best = TRUE) +
+  guides(shape = "none", color = "none") +
+  facet_wrap(~ model, scales = "free_x")
+```
+
+## 4-3　まとめと参考文献
+
+
+# Memo Ch.04

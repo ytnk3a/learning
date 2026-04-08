@@ -1,0 +1,104 @@
+---
+title: "Ch.06"
+output: html_document
+date: "2023-08-08"
+---
+
+```{r}
+d1 <- c(
+  28.2, 33.2, 36.4, 34.6, 29.1, 31.0, 39.6, 40.8, 37.9, 37.1,
+  43.6, 42.4, 46.3, 42.1, 43.5, 48.8, 43.7, 40.1, 41.0, 44.1,
+  46.4, 40.2, 38.6, 36.3, 56.3, 54.1, 59.4, 62.7, 60.0, 57.3
+  )
+
+lake <- factor(c(rep(1, 6), rep(2, 6), rep(3, 6), rep(4, 6), rep(5, 6)))
+
+summary(aov(d1 ~ lake))
+```
+
+
+分散分析をスクラッチで書いてみると下記のようなコードになる
+この時、全体平均から湖ごとの平均の差（群間平方）が湖内に生まれる平均からの差（群内）の方が大きいため、、
+偶然のばらつきに対して、処置効果の影響が高いと考える
+```{r}
+m <- length(unique(lake)); 
+ss_w <- 0
+ss_b <- 0
+
+mean_total <- mean(d1)
+for (i in 1:1:m) {
+  n <- length(lake[lake == i])
+  mean_group <- mean(d1[lake == i])
+  
+  ss_b <- ss_b + sum(n * (mean_group - mean_total)^2)
+  ss_w <- ss_w + sum((d1[lake == i] -  mean_group)^2)
+  
+}
+ss_b 
+ss_w
+
+ms_b <- ss_b / (m - 1); ms_b
+ms_w <- ss_w / (m * (n - 1)); ms_w
+
+f <- ms_b / ms_w; f
+
+1 - pf(f, df1 = m - 1, df2 = m * (n - 1))
+```
+
+```{r}
+pig <- c(60.8, 57.0, 65.0, 58.6, 61.7, 68.7, 6.7, 74.0, 66.3, 69.8, 102.6, 102.1, 100.2, 96.5, NA, 87.9, 84.2, 83.1, 85.7, 90.3)
+feed <- factor(c(rep(1, 5), rep(2, 5), rep(3, 5), rep(4, 5)))
+
+summary(aov(pig ~ feed))
+```
+
+```{r}
+res_aov <- aov(d1 ~ lake)
+TukeyHSD(res_aov)
+```
+
+
+```{r}
+res_aov <- aov(d1 ~ lake)
+res_aov
+cat("\n")
+cat("-----------------------summary()--------------------------\n")
+summary(res_aov)
+```
+
+
+```{r}
+TukeyHSD(res_aov)
+```
+
+
+```{r}
+library(multcomp)
+
+d <- data.frame(
+  score = c(7, 9, 8, 6, 9, 8, 11, 10, 8, 8, 8, 9, 10, 8, 9, 9, 10, 12, 11, 12, 12, 10, 11, 13, 9, 10, 13, 12, 12, 11, 14, 12, 11, 10),
+  group = factor(c(rep("C", 10), rep("g2", 8), rep("g3", 8), rep("g4", 8)))
+)
+
+group <- d$group
+head(d)
+
+res_aov <- aov(d$score ~ group) # d$group だと、エラーがでる
+res_glht <- glht(res_aov, linfct = mcp(group = "Dunnett"))
+summary(res_glht)
+```
+
+
+## シーケンシャル・ボンフェローニの方法
+
+```{r}
+d <- data.frame(
+  score = c(58, 52, 72, 60, 67,
+            62, 53, 74, 69, 60,
+            65, 62, 69, 75, 84, 79,
+            77, 72, 83, 81, 91, 83),
+  group = factor(c(rep("g1", 5), rep("g2", 5), rep("g3", 6), rep("g4", 6)))
+)
+pairwise.t.test(d$score, d$group, p.adj = "holm")
+```
+

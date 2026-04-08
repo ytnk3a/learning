@@ -1,0 +1,125 @@
+---
+title: "非線形微分方程式によるモデリング"
+format: html
+---
+
+```{r}
+library(deSolve)
+library(tidyverse)
+```
+
+## 非線形微分方程式によるモデリング
+
+
+$$ 
+\begin{align}
+
+\frac{dT(t)}{dt} &= L(t) - \beta T(t) V(t) \\
+\frac{dI(t)}{dt} &= \beta T(t) V(t) - \delta I(t) \\
+\frac{dV(t)}{dt} &= pI(t) - c V(t)
+
+\end{align}
+$$ 
+
+- $T(t)$: 時刻$t$における非感染標的細胞数
+- $L(t)$: 非感染細胞数の感染以外での時間変化
+- $V(t)$: 時刻tのウィルス量
+- $I(t)$: 時刻$t$における感染細胞数
+- $\delta$: 単位時間あたりで環境から排除される数
+- $\beta$: 標的細胞への感染可能割合
+- $p$: 単位時間当たりのウィルスの産生
+
+- $\frac{dT(t)}{dt} = L(t) - \beta T(t) V(t)$: 
+ 非感染細胞標的数の時間変化 = 非感染細胞の感染以外の時間変化 - 感染数
+
+- $\frac{dI(t)}{dt} = \beta T(t) V(t) - \delta I(t)$:
+ 感染細胞数は時間当たりの感染細胞数 - 排除されていく感染細胞数
+
+- $\frac{dV(t)}{dt} &= pI(t) - c V(t)$:
+ ウィルス数は感染細胞数-ウィルス量
+
+## $L_1(t) = \lambda - dTt$ の時
+排除率がdである標的細胞が単位時間あたり$\lambda$だけ増えるとき
+
+```{r}
+ode_eq <- function(t, pars, vars) {
+  with(as.list(c(pars, vars)), {
+    
+    ## var: T(t), I(t), V(t) input from arg:y
+    ## pars: input from arg:parms
+    
+    # dTdt <- Lt - beta * Tt * Vt
+    dTdt <- plambda - d * Tt - beta * Tt * Vt
+    dIdt <- beta * Tt * Vt - delta * It
+    dVdt <- p * It - c * Vt
+    
+    return(list(c(dTdt, dIdt, dVdt)))
+  })
+}
+
+
+times <- seq(0.0, 20.0, by = 0.001)
+## 1. lambda, d, beta, delta, p, c, T(0), I(0), V(0)
+pars1 <- c(0.0, 0.057, 8.61*(10.0^-11.0),
+          0.057 + 1.75, 3.26*(10.0^4.0), 1.93 + 0.039,
+          6.46*(10.0^6.0), 10.0^-1.0, 5.0*(10.0^4.0))
+
+var_init <- c(Tt = pars1[7], It = pars1[8], Vt = pars1[9])
+
+pars <- pars1[1:6]
+names(pars) <- c("plambda", "d", "beta", "delta", "p", "c")
+
+out <- ode(y = var_init, times = times, parms = pars, func = ode_eq)
+par(mfrow = c(2, 2))
+plot(out[, 1], log10(out[, 2]), type = "l")
+plot(out[, 1], log10(out[, 3]), type = "l")
+plot(out[, 1], log10(out[, 4]), type = "l")
+
+```
+## $L_2(t) = gT(t)(1-T(t)/K)$ の時
+
+標的細胞の増殖がロジスティック方程式に従うとき
+
+```{r}
+ode_eq2 <- function(t, var, pars) {
+  with(as.list(c(var, pars)), {
+    
+    ## var: T(t), I(t), V(t) input from arg:y
+    ## pars: input from arg:parms
+    
+    dTdt <- g * Tt * (1 - (Tt / K)) - beta * Tt * Vt
+    dIdt <- beta * Tt * Vt - delta * It
+    dVdt <- p * It - c * Vt
+    
+    return(list(c(dTdt, dIdt, dVdt)))
+  })
+}
+
+times <- seq(0.0, 20.0, by = 0.001)
+## 2. g, K, beta, delta, p, c, T(0), I(0), V(0)
+pars2 <- c(0.6, 10.0^7.0, 3.0*(10.0^-11.0),
+          0.5, 5.0*(10.0^4.0), 10.0,
+          10.0^6.0, 10.0, 2000.0)
+var_init <- c(Tt = pars2[7], It = pars2[8], Vt = pars2[9])
+
+pars_cal2 <- pars2[1:6]
+names(pars_cal2) <- c("g", "K", "beta", "delta", "p", "c")
+
+out2 <- ode(y = var_init, times = times, parms = pars_cal2, func = ode_eq2)
+
+par(mfrow = c(2, 2))
+plot(out2[, 1], log10(out2[, 2]), type = "l")
+plot(out2[, 1], log10(out2[, 3]), type = "l")
+plot(out2[, 1], log10(out2[, 4]), type = "l")
+```
+```{r}
+plot(out[, 1], log10(out[, 2]), type = "l", ylim = c(4.5, 7))
+lines(out2[, 1], log10(out2[, 2]), type = "l", col = "red")
+
+plot(out[, 1], log10(out[, 3]), type = "l", ylim = c(0, 7))
+lines(out2[, 1], log10(out2[, 3]), type = "l", col = "red")
+
+plot(out[, 1], log10(out[, 4]), type = "l", ylim = c(0, 10))
+lines(out2[, 1], log10(out2[, 4]), type = "l", col = "red")
+```
+

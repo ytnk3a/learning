@@ -1,0 +1,209 @@
+---
+title: "virus-ch02"
+format: html
+---
+
+```{r}
+rm(list = ls(all = TRUE))
+library(tidyverse)
+library(ggplot2)
+library(patchwork)
+library(deSolve)
+```
+## 2.3 線形微分方程式によるモデリング
+
+$$
+\begin{align}
+\frac{dI(t)}{dt} &= \beta T(0) V(t) - \delta I(t)\\
+\frac{dV(t)}{dt} &= p I(t) - cV(t)
+\end{align}
+$$
+
+```{r}
+ode_eq <- function(t, var, pars) {
+  
+  with(as.list(c(var, pars)), {
+    
+    dIdt <- beta * T0 * Vt - delta * It
+    dVdt <- p * It - c * Vt
+    
+    return(list(c(dIdt, dVdt)))
+  })
+  
+}
+
+
+ode_cal <- function(Tmin, Tmax, pars, fn) {
+
+  var_init <- c("It" = pars[[6]], "Vt" = pars[[7]])
+  pars_cal <- pars[1:5]
+  
+  t_list <- seq(Tmin, Tmax, by = 0.0001)
+  out <- ode(y = var_init, times = t_list, func = fn, parms = pars_cal)
+  
+  return(as.data.frame(out))
+  
+  
+}
+
+Tmin = 0.0
+Tmax = 10.0
+
+pars1 <- c(5.0 * 1e-8, 1, 1.0 * 1e3, 10, 3.7 * 1e5, 1, 100)
+names(pars1) <- c("beta", "delta", "p", "c", "T0", "I0", "V0")
+out1 <- ode_cal(Tmin, Tmax, pars1, ode_eq)
+
+pars2 <- c(5.0 * 1e-12, 1, 1.0 * 1e3, 10, 3.7 * 1e5, 1, 100)
+names(pars2) <- c("beta", "delta", "p", "c", "T0", "I0", "V0")
+out2 <- ode_cal(Tmin, Tmax, pars2, ode_eq)
+
+data_plot <- out1 %>% 
+  mutate(label = "pars1") %>% 
+  add_row(
+    out2 %>% 
+      mutate(label = "pars2")
+  )
+
+data_plot <- rbind(cbind(out1, label = "pars1"), cbind(out2, label = "pars2"))
+ggplot(data_plot, aes(x = time, y = log10(It), color = label, linetype = label)) +
+  geom_line()
+
+ggplot(data_plot, aes(x = time, y = log10(Vt), color = label, linetype = label)) +
+  geom_line()
+
+
+```
+
+
+```{r}
+## 計算する時刻の設定
+Tmin <- 0.0
+Tmax <- 10.0
+step_size <- 0.0001
+
+## パラメータの設定
+## beta, delta, p, c, T(0), I(0), V(0)
+pars1 <- c(0.00000006, 0.5, 100, 20, 10000, 10, 20)
+pars2 <- c(0.0000006, 0.5, 1000, 20, 10000, 10, 20)
+     
+## 傾き（微分）の定義
+ode_derives <- function(t, var, pars) {
+    with(as.list(c(var, pars)), {
+        dIdt <- beta * T0 * VL - delta * IC
+        dVdt <- p * IC - c * VL
+        
+        return(list(c(dIdt, dVdt)))
+    })
+}
+
+## パラメータを受け取ってode関数に渡す関数
+ODEs <- function(parms) {
+    pars <- parms[1:5]
+    names(pars) <- c("beta", "delta", "p", "c", "T0")
+    
+    ## 計算のタイムステップ
+    t_list <- seq(Tmin, Tmax, by = step_size)
+    ## 初期値 I(0), V(0)
+    var_init <- c(IC = parms[6], VL = parms[7])
+    ## 微分方程式の計算
+    out <- ode(y = var_init, times = t_list, func = ode_derives, parms = pars)
+    
+    as.data.frame(out)
+}
+     
+out1 <- ODEs(pars1)
+out2 <- ODEs(pars2)
+out1
+out2
+```
+
+
+```{r}
+data_plot <- rbind(cbind(out1, label = "pars1"), cbind(out2, label = "pars2"))
+
+## I(t)のプロット
+p1 <- ggplot(data = data_plot, aes(x = time, y = log10(IC), color = label, linetype = label)) +
+    geom_line()
+
+## V(t)のプロット
+p2 <- ggplot(data = data_plot, aes(x = time, y = log10(VL), color = label, linetype = label)) +
+    geom_line()
+
+options(repr.plot.width = 15, repr.plot.height = 5, repr.plot.res = 100) ## プロットの描画サイズの設定
+p1
+p2
+```
+
+```{r}
+
+## パラメータを受け取ってtheta_1の値を返す関数
+theta1 <- function(parms) {
+  beta <- parms[1]
+  delta <- parms[2]
+  p <- parms[3]
+  c <- parms[4]
+  T0 <- parms[5]
+
+  return((- (delta + c) + sqrt((delta - c)**2 + 4*beta*p*T0)) / 2)
+}
+
+## パラメータを受け取ってtheta_2の値を返す関数
+theta2 <- function(parms) {
+  beta <- parms[1]
+  delta <- parms[2]
+  p <- parms[3]
+  c <- parms[4]
+  T0 <- parms[5]
+
+  return((- (delta + c) - sqrt((delta - c)**2 + 4*beta*p*T0)) / 2)
+}
+
+## パラメータを受け取って解析解を返す関数
+ODEs_analytical <- function(parms) {
+  ## パラメータ
+  beta <- parms[1]
+  delta <- parms[2]
+  p <- parms[3]
+  c <- parms[4]
+  T0 <- parms[5]
+  I0 <- parms[6]
+  V0 <- parms[7]
+
+  ## 時間のリスト
+  t_list <- seq(Tmin, Tmax, by = step_size)
+
+  ## パラメータの値から計算されるtheta_1
+  theta1_c <- theta1(parms)
+  ## パラメータの値から計算されるtheta_2
+  theta2_c <- theta2(parms)
+
+  ## I(t)の解析解の値
+  I_list <- ((beta * T0 * V0 - (delta + theta2_c) * I0) / (theta1_c - theta2_c)) *
+    (exp(theta1_c * t_list) - exp(theta2_c * t_list)) + I0 * exp(theta2_c * t_list)
+  ## V(t)の解析解の値
+  V_list <- ((p * I0 - (c + theta2_c) * I0) / (theta1_c - theta2_c)) *
+    (exp(theta1_c * t_list) - exp(theta2_c * t_list)) + V0 * exp(theta2_c * t_list)
+
+  return(data.frame(time = t_list, IC = I_list, VL = V_list))
+}
+## 解析解
+out_analytical <- ODEs_analytical(pars1)   
+```
+
+
+```{r}
+data_plot <- rbind(cbind(out1, label = "Numerical"), cbind(out_analytical, label = "Analytical"))
+data_plot$label <- factor(data_plot$label, levels = c("Numerical", "Analytical"))
+
+## I(t)のプロット
+p1 <- ggplot(data = data_plot, aes(x = time, y = log10(IC), color = label, linetype = label)) +
+    geom_line()
+
+## V(t)のプロット
+p2 <- ggplot(data = data_plot, aes(x = time, y = log10(VL), color = label, linetype = label)) +
+    geom_line()
+
+p1
+p2
+```
+

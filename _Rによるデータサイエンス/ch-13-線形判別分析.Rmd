@@ -1,0 +1,119 @@
+---
+title: "Ch13. 線形判別分析"
+output: html_document
+date: "2023-12-30"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(MASS)
+```
+
+# 線形判別分析とは
+# 線形判別分析の基礎
+
+下記の2つの仮定のもとで、群間の分散と群内の分散の比を最大化する係数 $a_i$ を求める
+- データは多変量正規分布に従う
+- 各グループの母分散が等しい
+
+群間の分散
+$$
+BS = \frac{1}{g-1} \sum^g_{i=1} m_i (\bar{X}_i - \bar{X})(\bar{X}_i - \bar{X})^t
+$$
+- g: 群の数
+- m_i : 群i の個体数
+
+群内の分散
+$$
+WS = \frac{1}{m-g} \sum^g_{i=1} \sum^{m_i}_{j=1} m_i (\bar{X}_{ij} - \bar{X})(\bar{X}_{ij} - \bar{X})^t
+$$
+
+最大化対象
+$$
+V = \frac{BS}{WS} = \frac{A^t (BS) A}{A^t (WS) A}
+$$
+
+最大値を求めるために各係数での偏微分を0とした方程式を解くと、
+その解は $ WS^{-1} BS$ の固有値となる
+
+# ケーススタディ
+```{r}
+iris_lab <- c(rep("S", 50), rep("C", 50), rep("V", 50))
+
+iris1 <- data.frame(iris[, 1:4], Species = iris_lab)
+
+even_n <- 2 * (1:75) - 1
+
+iris_train <- iris1[even_n, ]
+iris_test <- iris1[-even_n, ]
+```
+
+```{r}
+z_lda <- lda(Species ~ ., data = iris_train)
+z_lda
+```
+
+定数項は次のように求めることができる
+
+```{r}
+apply(z_lda$means %*% z_lda$scaling, 2, mean)
+```
+
+判別関数で得られた値を判別得点 / discriminant score と呼び、
+その計算方法に関しては、
+
+```{r}
+disc_score <- z_lda$scaling[, 1] %*% t(iris_train[, 1:4]) - 1.486146
+disc_score[1:6]
+```
+```{r}
+predict(z_lda)$x %>% head()
+```
+
+```{r}
+table(iris_train[, 5], predict(z_lda)$class)
+```
+
+```{r}
+plot(z_lda, dimen = 1)
+plot(z_lda, dimen = 2)
+```
+
+## テストデータの判別
+```{r}
+y_pred <- predict(z_lda, iris_test[, -5])
+table(iris_test[, 5], y_pred$class)
+```
+
+```{r}
+plot(y_pred$x, type = "n")
+text(y_pred$x, label = iris_test$Species)
+```
+# 交差検証
+
+- Leave one out cross validation / LOOCV
+
+ldaには交差検証を行うCVの引数が存在している
+`CV=TRUE` にすると、LOOCVによる結果が返される
+
+```{r}
+iris_cv <- lda(Species ~ ., data = iris, CV = TRUE)
+
+lda_tab <- table(iris[, 5], iris_cv$class)
+lda_tab
+```
+
+```{r}
+# 判別率
+sum(lda_tab[row(lda_tab) == col(lda_tab)]) / sum(lda_tab)
+
+# 誤判別率
+sum(lda_tab[row(lda_tab) != col(lda_tab)]) / sum(lda_tab)
+```
+
+```{r}
+lda_tab
+row(lda_tab)
+col(lda_tab)
+```
+

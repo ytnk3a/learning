@@ -1,0 +1,126 @@
+---
+title: "Ch.04"
+output: html_document
+date: "2023-08-08"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+参考　
+- Chapter 12 回帰分析 | 卒業論文のためのR入門　
+  https://tomoecon.github.io/R_for_graduate_thesis/Regression.html
+
+```{r}
+library(wooldridge)
+library(modelsummary)
+data("saving")
+head(saving)
+```
+
+1980年代後半アメリカのデータ
+- sav: 貯蓄（年間、ドル）
+- inc: 収入（年間、ドル）
+- size: 家族の人数
+- educ: 教育年数
+- age: 年齢
+- black: 黒人ダミー
+- cons: 消費（年間、ドル）
+
+
+1. 変数$x$と変数$y$の関係の強さ（回帰係数）に影響を与える変数$m$が存在するときに、
+   変数$m$を調整変数と呼び、回帰係数に対するその影響を調整効果という
+
+2. この調整効果（交互作用）の検討に関しては一般的に階層的重回帰分析を利用して行われる。
+
+3. 階層的重回帰分析（hierarchical multiple regression)とは、いくつかのステップに分けて
+   重回帰分析を行う方法である
+
+4. 階層線形モデルと階層的重回帰分析は別の手法である
+
+```{r}
+fit1 <- lm(inc ~ educ, data = saving)
+summary(fit1)
+```
+
+```{r}
+fit2 <- lm(inc ~ educ + size + age, data = saving) 
+summary(fit2)
+```
+```{r}
+msummary(fit2)
+```
+
+## 決定係数の増分に関する検定
+
+新しい説明変数の投入によって、得られた決定係数の増分に対する検定を行う必要がある。
+2つのモデルにおける決定係数をそれぞれ$R^2_1$, $R^2_2$と、一つの目のモデルの説明変数の数は$J_1$, 
+二つ目のモデルの説明変数の数を$J_2$とすると、$F$統計量は下記のようになる
+$$
+F = \frac{(R_2^2 - R_1^2)/(J_2 - J_1)}{(1-R_2^2)/(N - J_2 - 1)}
+$$
+この時、この統計量は分子の自由度$J_2-J_1$、分母の自由度$N - J_2 - 1$に従う
+
+```{r}
+R1 <- summary(fit1)$r.squared
+R2 <- summary(fit2)$r.squared
+J1 <- 1
+J2 <- 3
+n_obs <- nrow(saving)
+
+F_value <- ((R2 - R1)/(J2 - J1)) / ((1 - R2) / (n_obs - J2 - 1))
+F_value
+
+1 - pf(F_value, J2 - J1, n_obs - J2 - 1)
+```
+
+`anova()`を使っても計算することができる
+```{r}
+anova(fit1, fit2)
+```
+
+また、情報量基準をつかうことも可能である。AIC / BICともに小さい方が
+いいモデルであることを示唆する
+
+- AICを計算するには
+```{r}
+extractAIC(fit1)
+extractAIC(fit2)
+```
+
+- BICを計算するには
+```{r}
+extractAIC(fit1, k = log(n_obs))
+extractAIC(fit2, k = log(n_obs))
+```
+
+```{r}
+msummary(
+  list(
+    "model1" = fit1,
+    "model2" = fit2
+  )
+)
+
+# 標準誤差から信頼区間を出力するには
+msummary(
+  list(
+    "model1" = fit1,
+    "model2" = fit2
+  ),
+  statistic = 'conf.int', conf_level = .95
+)
+```
+
+```{r}
+fit3 <- lm(inc ~ educ + black + educ:black, data = saving)
+summary(fit3)
+```
+
+# 重回帰分析での交互作用効果の検討
+
+# 単純傾斜分析
+
+# 重回帰分析における変数選択
+

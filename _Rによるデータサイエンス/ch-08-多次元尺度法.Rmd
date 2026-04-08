@@ -1,0 +1,199 @@
+---
+title: "Ch.08 多次元尺度法"
+output: html_document
+date: "2023-12-23"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 多次元尺度法とは
+主座標分析とも呼ばれる手法で、個体間の親近性データを2, 3次元空間に配置する方法。
+類似したものは近く、そうでないものは遠くに配置される
+
+数量化4類もMDSの一種とみなすことができる
+
+数量化4類のプログラムは
+
+
+# 距離と類似度
+
+## 距離
+- ユークリッド距離
+- マンハッタン距離 / 市街距離
+- ミンコフスキー距離
+
+## 類似度
+- ピアソン相関係数
+- パターン類似度
+
+## 距離関数
+- dist
+  - euclidean / maximum / manhattan / canberra / binary / minkovski
+
+- vegan::vegdist
+  - euclidean / maximum / manhattan / canberra / bray / kulczynski / jaccard /
+    gower / morishita / horn / mountford
+  
+# 計量MDSのケーススタディ
+MDSのプロセス
+1. 距離をもとめる
+2. 座標値をもとめる
+3. 散布図を作成
+4. 信頼性に関して考察
+
+$$
+
+z_{ij} = 
+- \frac{1}{2} ( d^2_{ij} - \sum^n_{i=1} \frac{d^2_{ij}}{n} - 
+\sum^n_{j=1} \frac{d^2_{ij}}{n} + \sum^n_{i=1}\sum^n_{j=1} \frac{d^2_{ij}}{n^2} )
+
+$$
+
+```{r}
+eur_cmd <- cmdscale(eurodist)
+
+plot(eur_cmd, type = "n")
+text(eur_cmd, rownames(eur_cmd))
+```
+
+cmdscaleで出した座標値の距離行列ともともとの距離との相関を求め、信頼性をチェック
+```{r}
+dhat <- dist(eur_cmd)
+cor(eurodist, dhat)^2
+```
+
+```{r}
+iris_dist <- dist(iris[, -5])
+
+iris_cmd <- cmdscale(iris_dist)
+iris_lab <- factor(c(rep("S", 50), rep("C", 50), rep("V", 50)))
+
+plot(iris_cmd, type = "n")
+text(iris_cmd, label = iris_lab, col = unclass(iris_lab))
+```
+
+```{r}
+head(iris_cmd)
+```
+
+# 非計量MDS
+MDSでは名義尺度や順行尺度などのデータに対しても用いられることがある。
+距離の性質を満たさないものに対しても、分析が可能なのが
+非計量MDSである
+
+- カルスカルのストレス
+
+$$
+
+STRESS = \sqrt{\frac{\sum\sum_{i \ne j} (\hat{d}_{ij} - d_{ij})^2}{\sum\sum d^2_{ij}}}
+
+$$
+非計量MDSを行う下記の関数がある。
+- isoMDS：ストレス値は下記で表されれ、百分率で返される
+$$
+
+STRESS = \frac{\sum\sum_{i \ne j} (\theta(d_{ij}) - \hat{d}_{ij})^2}{\sum\sum_{i \ne j} \hat{d}^2_{ij}}
+
+$$
+- sammon：重み付きストレスを最小化にすることで座標値をもとめる。ストレス値は百分率ではない
+$$
+
+STRESS = \frac{1}{ \sum\sum_{i \ne j} d^2_{ij} }  \sum\sum_{i \ne j} \frac{(\hat{d}_{ij} - d_{ij})^2}{d_{ij}}
+
+$$
+- metaMDS：ランダムなスタートを繰り返す
+
+isoMDS / sammonに関しては、初期値から計算を繰り返し、ストレス統計量が最小になるまで計算を繰り返す。
+指定しない場合はデフォルトに `cmdscale` の結果が使用される
+
+```{r}
+library(mlbench)
+library(e1071)
+library(MASS)
+library(vegan)
+set.seed(100)
+
+p <- mlbench.corners(n = 160)
+lab <- as.numeric(p$class)
+
+x_dist <- dist(p$x)
+x_dist2 <- as.matrix(x_dist)
+
+op <- par(mar = c(4.5, 4.5, 1, 1), mfrow = c(2, 2))
+
+plot(cmdscale(x_dist), pch = lab, col = lab)
+
+plot(sammon(x_dist)$points, pch = lab, col = lab)
+
+plot(isoMDS(x_dist)$points, pch = lab, col = lab)
+
+plot(metaMDS(x_dist2)$point, pch = lab, col = lab)
+
+par(op)
+```
+
+- [vegandevs/vegan: R package for community ecologists: popular ordination methods, ecological null models & diversity analysis](https://github.com/vegandevs/vegan)
+
+
+# 数量化4類
+
+- [R 数量化 IV 類](http://aoki2.si.gunma-u.ac.jp/R/qt4.html)
+
+```{r}
+# 数量化 IV 類
+qt4 <- function(s)                                   # 類似度行列
+{
+  if (is.data.frame(s)) {
+    s <- as.matrix(s)
+  }
+  n <- nrow(s)                                 # 行列のサイズ
+  object.names <- colnames(s)
+  if (is.null(object.names)) {
+    object.names <- paste("対象", 1:n, sep="")
+  }
+  h <- s+t(s)                                  # 転置行列との和を計算して，
+  diag(h) <- 0                                 # 対角要素を 0 にする
+  diag(h) <- -rowSums(h)                               # 行和を求めて新たな対角要素とする
+  res <- eigen(h)                                      # 固有値固有ベクトルを求める
+  values <- res$values[res$values > 1e-5]              # 固有値が 0.00001 以上のものを解とする
+  ax <- length(values)                         # 解の個数
+  vectors <- res$vectors[,1:ax]                        # 固有ベクトル
+  colnames(vectors) <- names(values) <- paste("解", 1:ax, sep="") # 名前を付ける
+  rownames(vectors) <- object.names            # 名前を付ける
+  return(structure(list(ax=ax, n=n, values=values, vectors=vectors), class="qt4"))
+}
+# print メソッド
+print.qt4 <- function(       res,                            # princo が返すオブジェクト
+                             ax=res$ax,                      # 何次元までの解を出力するか
+                             digits=5)                       # 表示桁数
+{
+  ax <- min(ax, res$ax)
+  val <- res$values
+  val2 <- val/sum(val)
+  val <- rbind(val, val2, cumsum(val2))
+  rownames(val) <- c("固有値", "寄与率", "累積寄与率")
+  print(round(val[, 1:ax], digits=digits))
+  cat("\nベクトル\n\n")
+  print(round(res$vectors[, 1:ax], digits=digits))
+}
+# plot メソッド
+plot.qt4 <- function(        res,                            # princo が返すオブジェクト
+                             text.cex=0.7,                   # ラベルのフォントの大きさ
+                             ...)                            # plot への引数
+{
+  if (res$ax >= 2) {                              # 二次元以上の解が得られたら，
+    plot(res$vectors[,1:2], ...)            # 二次元の図を描く
+    abline(v=0, h=0)
+    old <- par(xpd=TRUE)
+    text(res$vectors[,1], res$vectors[,2], rownames(res$vectors), pos=4, offset=.2, cex=text.cex)
+    par(old)
+  }
+  else {
+    warning("解が一次元なので，二次元配置図は描けません。")
+  }
+}
+
+```
+

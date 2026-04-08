@@ -1,0 +1,482 @@
+---
+title: "nezumi-ch04"
+format: html
+---
+
+
+## 閾値が一様分布の場合
+```{r}
+granovetter1 <- function(initial_val) {
+  
+  p0 <- phi0 <- initial_val
+  rb <- 0.8
+  theta <- 0.6
+  
+  i_end <- 150
+  
+  pt <- rep(0, i_end)
+  
+  pt[1] <- p0
+  
+  for (i in 1:(i_end-1)) {
+    if (pt[i] <= theta) {
+      
+      pt[i+1] <- (1 + rb * phi0) * (1 - (theta + phi0 - 1)/(theta * phi0) * (rb * phi0)/(1 + rb * phi0) * pt[i]) * pt[i]    
+      
+    } else {
+      cat(i, ", ", sep = "")
+      pt[i+1] <- (1 + rb) * (1 - rb / (1 + rb) * pt[i]) * pt[i]    
+      
+    }
+  }
+  
+  return(pt)
+}
+
+
+
+plot(granovetter1(0.01), type = "b")
+lines(granovetter1(0.02), type = "b", col = "tomato")
+lines(granovetter1(0.03), type = "b", col = "steelblue")
+lines(granovetter1(0.04), type = "b", col = "green")
+lines(granovetter1(0.05), type = "b", col = "orange")
+
+```
+
+
+## 閾値が正規分布の場合
+
+```{r}
+
+granovetter2 <- function(initial_val) {
+  P0 <- phi0 <- initial_val
+  rb <- 0.8
+  alpha_val <- 2
+  i_end <- 60
+  
+  Pt <- rep(0, i_end)
+  
+  Pt[1] <- P0
+  for (i in 1:(i_end - 1)) {
+    Pt[i+1] <- (1 + rb * (phi0 - Pt[i] + (1 - phi0) * pnorm(alpha_val * Pt[i], alpha_val * 0.6, alpha_val * 0.1))) * Pt[i]
+  }
+  
+  return(Pt)
+}
+
+plot(granovetter2(0.38),   type = "b", ylim = c(0, 1))
+lines(granovetter2(0.41),  type = "b", col = "gray60")
+lines(granovetter2(0.415), type = "b", col = "gray50")
+lines(granovetter2(0.417), type = "b", col = "tomato")
+lines(granovetter2(0.42),  type = "b", col = "red1")
+lines(granovetter2(0.45),  type = "b", col = "red3")
+lines(granovetter2(0.50),  type = "b", col = "red4")
+lines(granovetter2(0.1),   type = "b", col = "steelblue")
+lines(granovetter2(0.2),   type = "b", col = "blue1")
+lines(granovetter2(0.3),   type = "b", col = "blue4")
+```
+
+```{r}
+granovetter3 <- function(initial_val, mean, sd) {
+  P0 <- phi0 <- initial_val
+  rb <- 0.8
+  alpha_val <- 2
+  i_end <- 100
+  
+  Pt <- rep(0, i_end)
+  
+  Pt[1] <- P0
+  for (i in 1:(i_end - 1)) {
+    Pt[i+1] <- (1 + rb * (phi0 - Pt[i] + (1 - phi0) * pnorm(alpha_val * Pt[i], alpha_val * mean, alpha_val * sd))) * Pt[i]
+  }
+  
+  return(Pt[100])
+}
+
+fecth_pstar <- function(ini_set, mean, sd) {
+  Pstar <- rep(0, length(ini_set))
+  for (i in seq_along(ini_set)) {
+    
+    Pstar[i] <- granovetter3(ini_set[i], mean, sd)
+    
+  }
+  return(Pstar)
+}
+ini_set <- seq(0, 1, by = 0.01)
+
+par(mfrow = c(2, 2)) 
+plot(ini_set, fecth_pstar(ini_set, 0.4, 0.1), type = "b")
+plot(ini_set, fecth_pstar(ini_set, 0.6, 0.1), type = "b")
+plot(ini_set, fecth_pstar(ini_set, 0.8, 0.1), type = "b")
+plot(ini_set, fecth_pstar(ini_set, 0.89, 0.1), type = "b")
+
+plot(ini_set, fecth_pstar(ini_set, 0.6, 0.05), type = "b", col = "steelblue")
+plot(ini_set, fecth_pstar(ini_set, 0.6, 0.25), type = "b", col = "steelblue")
+plot(ini_set, fecth_pstar(ini_set, 0.7, 0.35), type = "b", col = "steelblue")
+plot(ini_set, fecth_pstar(ini_set, 0.6, 0.45), type = "b", col = "steelblue")
+```
+
+```{r}
+granovetter4 <- function(initial_val, mean, sd) {
+  P0 <- phi0 <- initial_val
+  rb <- 0.8
+  alpha_val <- 2
+  i_end <- 100
+  
+  Pt <- rep(0, i_end)
+  
+  Pt[1] <- P0
+  for (i in 1:(i_end - 1)) {
+    Pt[i+1] <- (1 + rb * (phi0 - Pt[i] + (1 - phi0) * pnorm(alpha_val * Pt[i], alpha_val * mean, alpha_val * sd))) * Pt[i]
+  }
+  
+  return(Pt[100])
+}
+
+granovetter3 <- function(initial_val, mean, sd) {
+  P0 <- phi0 <- initial_val
+  rb <- 0.8
+  alpha_val <- 2
+  i_end <- 100
+  
+  Pt <- rep(0, i_end)
+  
+  Pt[1] <- P0
+  for (i in 1:(i_end - 1)) {
+    Pt[i+1] <- (1 + rb * (phi0 - Pt[i] + (1 - phi0) * pnorm(alpha_val * Pt[i], alpha_val * mean, alpha_val * sd))) * Pt[i]
+  }
+  
+  return(Pt[100])
+}
+
+fecth_pstar2 <- function(p_phi, mean_set, sd) {
+  
+  Pstar <- rep(0, length(mean_set))
+  for (i in seq_along(mean_set)) {
+    
+    Pstar[i] <- granovetter3(p_phi, mean_set[i], sd)
+    
+  }
+  return(Pstar)
+}
+mean_set <- seq(0, 1, by = 0.01)
+
+par(mfrow = c(1, 2)) 
+plot(mean_set, fecth_pstar2(0.01, mean_set, 0.3), type = "b")
+plot(mean_set, fecth_pstar2(0.01, mean_set, 0.45), type = "b")
+
+fecth_pstar3 <- function(p_phi, mean, sd_set) {
+  
+  Pstar <- rep(0, length(sd_set))
+  for (i in seq_along(sd_set)) {
+    
+    Pstar[i] <- granovetter3(p_phi, mean, sd_set[i])
+    
+  }
+  return(Pstar)
+}
+sd_set <- seq(0, 1, by = 0.01)
+
+par(mfrow = c(1, 2)) 
+plot(mean_set, fecth_pstar3(0.01, 0.4, sd_set), type = "b")
+plot(mean_set, fecth_pstar3(0.01, 0.6, sd_set), type = "b")
+
+```
+
+```{r}
+granovetter4 <- function(alpha_val, sd) {
+  
+  P0 <- phi0 <- 0.1
+  rb <- 0.8
+  # alpha_val <- 2
+  i_end <- 100
+  mean <- 0.6
+
+  Pt <- rep(0, i_end)
+  
+  Pt[1] <- P0
+  for (i in 1:(i_end - 1)) {
+    Pt[i+1] <- (1 + rb * (phi0 - Pt[i] + (1 - phi0) * pnorm(alpha_val * Pt[i], mean, sd / alpha_val))) * Pt[i]
+  }
+  
+  return(Pt[100])
+  
+}
+
+fecth_pstar3 <- function(alpha_set, sd) {
+  
+  Pstar <- rep(0, length(alpha_set))
+  for (i in seq_along(alpha_set)) {
+    
+    Pstar[i] <- granovetter4(alpha_set[i], sd)
+    
+  }
+  
+  return(Pstar)
+
+}
+alpha_set <- 1:40
+par(mfrow = c(1, 3)) 
+plot(alpha_set, fecth_pstar3(alpha_set, 0.1), type = "b")
+
+alpha_set <- seq(1, 5, by = 0.01)
+plot(alpha_set, fecth_pstar3(alpha_set, 0.4), type = "b")
+plot(alpha_set, fecth_pstar3(alpha_set, 0.6), type = "b")
+
+```
+
+## $alpha$の時間的変化に関して
+
+```{r}
+
+granovetter_at <- function(initial_val, at) {
+  P0 <- phi0 <- initial_val
+  rb <- 0.8
+  i_end <- 100
+  
+  Pt <- rep(0, i_end)
+  
+  Pt[1] <- P0
+  for (i in 1:(i_end - 1)) {
+    Pt[i+1] <- (1 + rb * (phi0 - Pt[i] + (1 - phi0) * pnorm(at[i] * Pt[i], 0.6 , 0.1))) * Pt[i]
+  }
+  
+  return(Pt)
+}
+
+sim_noise <- function(start_i, end_i, noise) {
+  i_end <- 100
+  at <- rep(1, i_end)
+  at[start_i:end_i] <- noise
+  par(mfrow  = c(1 ,2))
+  plot(at, type = "l")
+  plot(1:i_end, granovetter_at(0.1, at), ylim = c(0, 1), type = "l")
+  points(1:i_end, granovetter_at(0.1, at), pch = 20, cex = 0.5)
+  
+}
+
+sim_noise(51, 59, 4.0)
+sim_noise(51, 61, 4.0)
+sim_noise(51, 62, 4.0)
+
+```
+```{r}
+range(rnorm(1000000, 0.6, 0.1))
+```
+
+```{r}
+
+granovetter_at_upd <- function(at, i_end) {
+  # i_end <- 100
+  xi_mean <- 0.6
+  sd <- 0.1
+  rB <- 0.8
+  
+  xi <- seq(0.1, 1.2, length = 1000)
+  d_xi <- xi[2] - xi[1]
+  f <- dnorm(xi, mean = xi_mean, sd = sd)
+  
+  u0 <- (1 - 0.1) * f
+  U0 <- sum(u0) * d_xi
+  P0 <- 1 - U0
+  
+  Ut <- Pt <- numeric(i_end)
+  Pt[1] <- P0
+  Ut[1] <- U0
+  
+  u_current <- u0
+  for (i in 1:(i_end-1)) {
+    
+    on_rule <- xi <= at[i] * Pt[i]
+    u_next <- u_current
+    u_next[on_rule] <- u_current[on_rule] - rB * Pt[i] * u_current[on_rule]
+
+    Ut[i + 1] <- sum(u_next) * d_xi
+    Pt[i + 1] <- 1 - Ut[i + 1]
+    
+    u_current <- u_next
+    
+  }
+  return(Pt)
+}
+
+i_end <- 120
+at <- rep(1, i_end)
+at[51:59] <- 4.0
+plot(1:i_end, granovetter_at_upd(at, i_end), type = "l", ylim = c(0, 1))
+
+at <- rep(1, i_end)
+at[51:61] <- 4.0
+plot(1:i_end, granovetter_at_upd(at, i_end), type = "l", ylim = c(0, 1))
+
+at <- rep(1, i_end)
+at[51:62] <- 4.0
+plot(1:i_end, granovetter_at_upd(at, i_end), type = "l", ylim = c(0, 1))
+
+at <- rep(1, i_end)
+at[51:63] <- 4.0
+plot(1:i_end, granovetter_at_upd(at, i_end), type = "l", ylim = c(0, 1))
+
+```
+
+## 4.4 
+```{r}
+xi1_seq <- seq(0, 1, length = 100)
+xi2_seq <- seq(0, 1, length = 100)
+
+d_xi1 <- xi1_seq[2] - xi1_seq[1] # 0.001001001
+d_xi2 <- xi2_seq[2] - xi2_seq[1] # 0.001001001
+
+f <- function(x1, x2) {
+  alpha <- 1
+  return(ifelse(x2 > x1, 2 / alpha^2, 0))
+}
+
+z <- outer(xi1_seq, xi2_seq, f)
+
+# persp(xi1, xi2, z, xlim = c(-0.1, 1.1), ylim = c(-0.1, 1.1), zlim = c(-0.1, 2.5), theta = -20)
+
+r1B <- 0.8
+r2B <- 0.5
+a <- 1
+
+phi0 <- 0.03
+u0 <- (1 - phi0) * z
+p0 <- phi0 * z
+c0 <- 0 * z
+
+U0 <- sum(u0) * d_xi1 * d_xi2
+P0 <- sum(p0) * d_xi1 * d_xi2
+C0 <- sum(c0) * d_xi1 * d_xi2
+
+i_end <- 100
+Ut <- Pt <- Ct <- numeric(i_end)
+Pt[1] <- P0
+Ut[1] <- U0
+Ct[1] <- C0
+
+u_current <- u0
+p_current <- p0
+c_current <- c0
+
+xi1 <- matrix(rep(xi1_seq, length(xi2_seq)), ncol = length(xi1_seq))
+xi2 <- matrix(rep(xi2_seq, length(xi1_seq)), ncol = length(xi1_seq), byrow = T)
+
+for (i in 1:(i_end-1)) {
+  
+  u_next <- u_current
+  p_next <- p_current
+  c_next <- c_current
+  
+  on_rule <- xi1 <= a * Pt[i]
+  u_next[on_rule] <- u_current[on_rule] - r1B * Pt[i] * u_current[on_rule]
+  
+  # - eqution for pt
+  on_rule2 <- xi2 <= a * Pt[i]
+  p_next[on_rule2] <- p_current[on_rule2] - r2B * Pt[i] * p_current[on_rule2] + r1B * Pt[i] * u_current[on_rule2]
+  
+  on_rule3 <- xi1 <= a * Pt[i] & a * Pt[i] < xi2
+  p_next[on_rule3] <- p_current[on_rule3] + r1B * Pt[i] * u_current[on_rule3]
+  
+  # - equation for ct
+  on_rule4 <- xi2 <= a * Pt[i]
+  c_next[on_rule4] <- c_current[on_rule4] + r2B * Pt[i] * p_current[on_rule4]
+  
+  
+  Ut[i + 1] <- sum(u_next) * d_xi1 * d_xi2
+  Pt[i + 1] <- sum(p_next) * d_xi1 * d_xi2
+  Ct[i + 1] <- 1 - Ut[i + 1] - Pt[i + 1]
+  
+  u_current <- u_next
+  p_current <- p_next
+  c_current <- c_next
+  
+}
+
+plot(Pt, col = "red", ylim = c(0, 1), type = "l")
+lines(Ut, col = "blue")
+lines(Ct, col = "orange")
+```
+
+
+```{r}
+xi1_seq <- seq(0, 1, length = 100)
+xi2_seq <- seq(0, 1, length = 100)
+
+d_xi1 <- xi1_seq[2] - xi1_seq[1] # 0.001001001
+d_xi2 <- xi2_seq[2] - xi2_seq[1] # 0.001001001
+
+f <- function(x1, x2) {
+  alpha <- 1
+  return(ifelse(x2 > x1, 2 / alpha^2, 0))
+}
+
+z <- outer(xi1_seq, xi2_seq, f)
+
+# persp(xi1, xi2, z, xlim = c(-0.1, 1.1), ylim = c(-0.1, 1.1), zlim = c(-0.1, 2.5), theta = -20)
+
+r1B <- 0.8
+r2B <- 0.5
+a <- 1
+w <- 1
+
+phi0 <- 0.03
+u0 <- (1 - phi0) * z
+p0 <- phi0 * z
+c0 <- 0 * z
+
+U0 <- sum(u0) * d_xi1 * d_xi2
+P0 <- sum(p0) * d_xi1 * d_xi2
+C0 <- sum(c0) * d_xi1 * d_xi2
+
+i_end <- 100
+Ut <- Pt <- Ct <- numeric(i_end)
+Pt[1] <- P0
+Ut[1] <- U0
+Ct[1] <- C0
+
+u_current <- u0
+p_current <- p0
+c_current <- c0
+
+xi1 <- matrix(rep(xi1_seq, length(xi2_seq)), ncol = length(xi1_seq))
+xi2 <- matrix(rep(xi2_seq, length(xi1_seq)), ncol = length(xi1_seq), byrow = T)
+
+for (i in 1:(i_end-1)) {
+  
+  u_next <- u_current
+  p_next <- p_current
+  c_next <- c_current
+  
+  on_rule <- xi1 <= a * Pt[i]
+  u_next[on_rule] <- u_current[on_rule] + w * c_current[on_rule] - r1B * Pt[i] * u_current[on_rule]
+  u_next[!on_rule] <- u_current[!on_rule] + w * c_current[!on_rule]
+  
+  # - eqution for pt
+  on_rule2 <- xi2 <= a * Pt[i]
+  p_next[on_rule2] <- p_current[on_rule2] - r2B * Pt[i] * p_current[on_rule2] + r1B * Pt[i] * u_current[on_rule2]
+  
+  on_rule3 <- xi1 <= a * Pt[i] & a * Pt[i] < xi2
+  p_next[on_rule3] <- p_current[on_rule3] + r1B * Pt[i] * u_current[on_rule3]
+  
+  # - equation for ct
+  on_rule4 <- xi2 <= a * Pt[i]
+  c_next[on_rule4] <- c_current[on_rule4] - w * c_current[on_rule4] + r2B * Pt[i] * p_current[on_rule4]
+  c_next[!on_rule4] <- c_current[!on_rule4] - w * c_current[!on_rule4]
+  
+  
+  Ut[i + 1] <- sum(u_next) * d_xi1 * d_xi2
+  Pt[i + 1] <- sum(p_next) * d_xi1 * d_xi2
+  Ct[i + 1] <- 1 - Ut[i + 1] - Pt[i + 1]
+  
+  u_current <- u_next
+  p_current <- p_next
+  c_current <- c_next
+  
+}
+
+plot(Pt, col = "red", ylim = c(0, 1), type = "l")
+lines(Ut, col = "blue")
+lines(Ct, col = "orange")
+```
+

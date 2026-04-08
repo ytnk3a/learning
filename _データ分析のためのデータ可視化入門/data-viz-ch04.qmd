@@ -1,0 +1,259 @@
+---
+title: "4章: 正しい数値の示し方"
+format: html
+editor: source
+---
+
+```{r}
+library(tidyverse)
+library(gapminder)
+library(socviz)
+```
+
+## 4.1
+
+## 4.2 グループ別データに対応する審美的要素
+
+```{r}
+p <- ggplot(data = gapminder, aes(x = year, y = gdpPercap))
+
+p + geom_line()
+```
+
+### fig 4.3
+
+```{r}
+p <- ggplot(data = gapminder, aes(x = year, y = gdpPercap))
+
+p + geom_line(aes(group = country)) +
+  facet_wrap(~ continent)
+```
+
+### fig 4.4
+
+```{r}
+p + geom_line(aes(group = country)) +
+  geom_smooth(size = 1.1, method = "loess", se = FALSE) +
+  facet_wrap(~ continent) +
+  scale_y_log10(labels = scales::dollar) +
+  labs(
+    x = "Year",
+    y = "log GDP per capita",
+    title = "GDP per capita on Five Continents"
+  )
+```
+
+### fig 4.5 in GSS
+
+```{r}
+
+p <- ggplot(data = gss_sm, aes(x = age, y = childs)) 
+
+p + 
+  geom_point() +
+  geom_smooth() +
+  facet_grid(sex ~ race)
+```
+
+## 4.4 geomによるデータ変換
+
+```{r}
+p <- ggplot(data = gss_sm, aes(x = bigregion))
+p$data %>% glimpse()
+
+p2 <- p + geom_bar(aes(y = after_stat(prop), group = 1))
+p2
+
+p2$data %>% glimpse()
+```
+
+## 4.5 まわりくどく度数分布表を描いてみる
+
+### fig 4.11
+
+```{r}
+p <- ggplot(gss_sm, aes(x = bigregion, fill = religion))
+p + geom_bar(position = "fill")
+```
+
+### fig 4.12
+
+```{r}
+p <- ggplot(gss_sm, aes(x = bigregion, fill = religion))
+p + geom_bar(position = "dodge", aes(y = after_stat(prop)))
+```
+
+### fig 4.13
+
+```{r}
+p <- ggplot(gss_sm, aes(x = bigregion, fill = religion))
+p + geom_bar(position = "dodge", aes(y = after_stat(prop), group = religion))
+```
+
+下記のグラフはfig 4.13を少し改変したもの。割合は正しい値だが、X軸が`religion`になっている. 理想はX軸は`bigregion`であることが望ましい。
+
+```{r}
+p <- ggplot(gss_sm, aes(x = religion, fill = bigregion))
+p + geom_bar(position = "dodge", aes(y = after_stat(prop), group = bigregion))
+```
+
+そこで、xにbigregionを指定し、groupにbigregionにしたが、warningが出てしまう generated valueの計算がx: bigregion x group: bigregionだとうまくいかないのか
+
+```{r}
+p <- ggplot(gss_sm, aes(x = bigregion, fill = religion))
+p + geom_bar(position = "dodge", aes(y = after_stat(prop), group = bigregion))
+```
+
+下記だと問題なくできた。 \### fig 4.14
+
+```{r}
+p <- ggplot(gss_sm, aes(x = religion))
+p + geom_bar(position = "dodge", aes(y = after_stat(prop), group = bigregion)) +
+  facet_wrap(~ bigregion)
+```
+
+## 4.6 ヒストグラムと密度プロット
+
+### fig 4.15
+
+```{r}
+p <- ggplot(midwest, aes(x = area))
+
+p + geom_histogram()
+```
+
+`bins`の数を調整: いくつの棒で表現するか
+
+```{r}
+p <- ggplot(midwest, aes(x = area))
+
+p + geom_histogram(bins = 10)
+```
+
+### fig 4.16
+
+```{r}
+oh_wi <- c("OH", "WI")
+
+p <- ggplot(
+  data = subset(midwest, subset = state %in% oh_wi),
+  mapping = aes(x = percollege, fill = state))
+
+p + geom_histogram(alpha = 0.4, bins = 20)
+```
+
+データの抽出をdplyrを使った場合
+
+```{r}
+p <- ggplot(
+  data = midwest %>% filter(state %in% oh_wi),
+  mapping = aes(x = percollege, fill = state))
+
+p + geom_histogram(alpha = 0.4, bins = 20)
+```
+
+### fig 4.17
+
+```{r}
+p <- ggplot(midwest, aes(x = area))
+p + geom_density()
+```
+
+### fig 4.18
+
+```{r}
+p <- ggplot(midwest, aes(x = area, fill = state, colour = state))
+p + geom_density(alpha = 0.3)
+
+p <- ggplot(
+  data = midwest,
+  mapping = aes(x = area, fill = state)
+  )
+p + geom_histogram(alpha = 0.4, bins = 20)
+```
+
+### fig 4.18
+
+```{r}
+p <- ggplot(
+  data = midwest %>% filter(state %in% oh_wi),
+  mapping = aes(x = area, fill = state, color = state))
+
+p + geom_density(
+  aes(y = after_stat(scaled)),
+  alpha = 0.3
+  )
+```
+
+### fig 4.19
+
+```{r}
+p <- ggplot(
+  data = midwest %>% filter(state %in% oh_wi),
+  mapping = aes(x = percollege, fill = state, color = state))
+
+p + geom_density(
+  aes(y = after_stat(scaled)),
+  alpha = 0.3
+  )
+```
+
+```{r}
+ggplot(diamonds, aes(x = depth, fill = cut, colour = cut)) +
+  geom_density(alpha = 0.1)
+ggplot(diamonds, aes(x = depth, fill = cut, colour = cut)) +
+  geom_density(aes(y = after_stat(scaled)), alpha = 0.1)
+```
+
+## 4.7 不要な変換を避ける
+
+### fig 4.20
+
+```{r}
+p <- ggplot(data = titanic, aes(x = fate, y = percent, fill = sex))
+
+p + geom_bar(position = "dodge", stat = "identity") +
+  theme(legend.position = "top")
+
+```
+
+`geom_bar()`と`geom_col()`の違い `geom_col()`は`stat_`関数のデフォルトの設定が`stat = "identity"`となっているため、 棒グラフを書く上で、`stat_`関数による計算を行う必要がない場合には`geom_col()`を使う
+
+`stat = "identity"`が集計・計算を行わないと意味するように、 `position = "identity"`はただ、与えられた値をプロットするを意味する
+
+```{r}
+p + geom_col(position = "dodge") +
+  theme(legend.position = "top")
+```
+
+### fig 4.21
+
+```{r}
+p <- ggplot(data = oecd_sum, aes(x = year, y = diff, fill = hi_lo))
+
+p + geom_col() +
+  guides(fill = "none") +
+  labs(
+    x = NULL,
+    y = "Difference in Years",
+    title = "The US Life Expectancy Gap",
+    subtitle = "Difference...",
+    caption = "Data: OECD."
+  )
+```
+
+```{r}
+p <- ggplot(gss_sm, aes(x = bigregion, fill = religion))
+p + geom_bar(position = "fill") +
+  facet_wrap(~ sex + race)
+
+p + geom_bar(position = "fill") +
+  facet_grid(rows = vars(sex), cols = vars(race))
+```
+
+```{r}
+p <- ggplot(midwest, aes(x = area))
+
+p + geom_histogram(bins = 10)
+p + geom_freqpoly()
+```

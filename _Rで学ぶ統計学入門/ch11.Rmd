@@ -1,0 +1,151 @@
+---
+title: "Ch.11"
+output: html_document
+date: "2023-08-08"
+---
+
+```{r}
+library(lme4)
+```
+
+
+```{r}
+x <- c(1.0, 1.5, 2.1, 2.7, 3.4, 3.9, 3.0, 4.7, 3.8, 6.0, 6.8, 7.1, 6.2, 7.5, 8.1, 9.0, 9.5, 10.1)
+y <- c(9.0, 8.3, 10.5, 9.7, 10.2, 11.8, 6.9, 7.3, 6.2, 8.9, 8.7, 9.5, 6.0, 6.9, 7.1, 8.0, 7.2, 7.9)
+block <- c(rep("a", 6), rep("b", 6), rep("c", 6))
+
+plot(y ~ x, pch = as.character(block))
+```
+```{r}
+summary(lm(y ~ x))
+```
+```{r}
+plot(y ~ x, pch = as.character(block))
+abline(lm(y ~ x), col = "red")
+```
+
+```{r}
+res1 <- glmer(y ~ x + (1|block), family = gaussian(link = identity))
+res2 <- lmer(y ~ x + (1|block))
+
+summary(res1)
+```
+
+
+```{r}
+summary(res2)
+```
+
+```{r}
+library(lme4)
+library(glmmML)
+
+y <- c(0, 0, 0, 1, 0, 1, 0 ,0, 1, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 1)
+x <- rep(1:5, each = 8)
+id <- rep(1:10, 4)
+
+res1 <- glmer(y ~ x + (1 | id), family = binomial)
+# res1 <- glmer(y ~ x + (1 | id), family = binomial("logit"))
+summary(res1)
+
+res2 <- glmmML(y ~ x, cluster = id, family = binomial(logit))
+summary(res2)
+
+```
+
+## 
+
+```{r}
+d1104 <- read.csv("sample/table11-4.csv")
+d1105 <- read.csv("sample/table11-5.csv")
+d1104
+d1105
+```
+
+```{r}
+res_poi <- glm(flw ~ wt, data = d1104, family = poisson)
+summary(res_poi)
+
+71.071 / 34
+```
+```{r}
+cat("Coeff ----\n")
+res_poi$coefficients
+cat("Residual Deviance / dof = ")
+cat(res_poi$deviance / res_poi$df.residual)
+```
+
+```{r}
+library(MASS)
+res_nb <- glm(flw ~ wt, data = d1104, family = negative.binomial(1))
+summary(res_nb)
+
+cat("Coeff ----\n")
+res_nb$coefficients
+cat("Residual Deviance / dof = ")
+cat(res_nb$deviance / res_nb$df.residual)
+
+res_nb457 <- glm(flw ~ wt, data = d1104, family = negative.binomial(4.57))
+summary(res_nb)
+
+cat("Coeff ----\n")
+res_nb457$coefficients
+cat("Residual Deviance / dof = ")
+cat(res_nb457$deviance / res_nb457$df.residual)
+```
+
+```{r}
+res_nb2 <- with(d1104,{
+  glm.nb(flw ~ wt)
+})
+
+summary(res_nb2)
+cat("Coeff ----\n")
+res_nb2$coefficients
+cat("Residual Deviance / dof = ")
+cat(res_nb2$deviance / res_nb2$df.residual)
+```
+
+```{r}
+res_qpoi <- glm(flw ~ wt, data = d1104, family = quasipoisson)
+summary(res_qpoi)
+
+cat("Coeff ----\n")
+res_qpoi$coefficients
+cat("Residual Deviance / dof = ")
+cat(res_qpoi$deviance / res_qpoi$df.residual)
+```
+
+```{r}
+
+cat("glm(, family = poisson) >> Coeff ----\n")
+res_poi$coefficients
+cat("\n")
+
+cat("glm(, family = negative.binomial(1)) >> Coeff ----\n")
+res_nb$coefficients
+cat("\n")
+
+
+cat("glm.nb() >> Coeff ----\n")
+res_nb2$coefficients
+cat("\n")
+
+cat("glm(, family = quasipoisson) >> Coeff ----\n")
+res_qpoi$coefficients
+```
+
+
+```{r}
+res_nb457 <- glm(flw ~ wt, data = d1104, family = negative.binomial(4.57))
+cat("Coeff ----\n")
+res_nb457$coefficients
+
+res_nb2 <- with(d1104,{
+  glm.nb(flw ~ wt)
+})
+
+cat("Coeff ----\n")
+res_nb2$coefficients
+```
+

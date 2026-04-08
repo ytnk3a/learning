@@ -1,0 +1,352 @@
+---
+title: "ch.02: 回帰モデルの作成"
+format: html
+editor: source
+---
+
+```{r}
+library(tidyverse)
+# library(tidymodels)
+library(rsample)
+library(parsnip)
+
+data(ames, package = "modeldata")
+
+ames_reg_data <- ames %>% 
+  filter(Garage_Area > 0)
+
+ames_reg_data %>% 
+  ggplot(aes(x = Garage_Area, y = Sale_Price)) +
+  geom_point()
+```
+
+# 2-1　statsパッケージによる線形回帰モデルの作成
+```{r}
+lm_price_garage <- lm(Sale_Price ~ Garage_Area, data = ames_reg_data)
+
+summary(lm_price_garage)
+```
+
+# 2-2　parsnipパッケージによる線形回帰モデルの作成
+
+
+```{r}
+linear_reg
+```
+```{r}
+linear_reg(mode = "regression")
+
+# or
+
+linear_reg() %>% 
+  set_mode(mode = "regression")
+```
+
+```{r}
+show_engines("linear_reg")
+```
+
+```{r}
+lm_mod <- linear_reg() %>% 
+  set_mode("regression") %>% 
+  set_engine("lm") 
+
+lm_mod %>% 
+  fit(Sale_Price ~ Garage_Area, data = ames_reg_data)
+```
+```{r}
+lm_mod %>% 
+  translate()
+```
+
+
+### parnsipパッケージでのハイパーパラメータの設定方法
+```{r}
+linear_reg() %>% 
+  set_args(mixture = 1, penalty = 1)
+```
+# 2-3　parsnipパッケージの便利な機能
+
+```{r}
+# parsnip_addin()
+linear_reg_glm_spec <-
+  linear_reg() %>%
+  set_engine('glm')
+
+```
+
+```{r}
+ames_spl <- ames_reg_data %>% 
+  initial_split(prop = 0.7)
+
+ames_train <- training(ames_spl)
+ames_test <- testing(ames_spl)
+
+lm_model <- linear_reg(mixture = 1, penalty = 1) %>% 
+  set_engine("lm") %>% 
+  set_mode("regression")
+
+lm_formula_fit <- lm_model %>% 
+  fit(Sale_Price ~ Garage_Area, data = ames_train)
+
+y <- ames_train %>% 
+  select(Sale_Price)
+
+x <- ames_train %>% 
+  select(Garage_Area)
+
+lm_xy_fit <- lm_model %>% 
+  fit_xy(x = x, y = y)
+```
+
+
+```{r, eval=FALSE}
+
+# randomForest
+rf1 <- randomForest(
+  y ~ .,
+  data = dat,
+  mtry = 10,
+  ntree = 2000,
+  importance = TRUE
+)
+
+# ranger
+rf2 <- ranger(
+  y ~ .,
+  data = dat,
+  mtry = 10,
+  num.tree = 2000,
+  importance = "impurity"
+)
+
+# sparklyr
+rf3 <- ml_random_forest(
+  dat,
+  intercept = FALSE,
+  response = "y",
+  features = names(dat)[names(dat) != "y"],
+  col.sample.rate = 10,
+  num.trees = 2000
+)
+
+
+# mtry: 無作為抽出する変数の数, trees: 作成する木の数
+rand_forest(mtry = 10, trees = 2000) %>% 
+  set_engine("ranger") %>% 
+  set_mode("regression")
+
+rand_forest(mtry = 10, trees = 2000) %>% 
+  set_engine("spark") %>% 
+  set_mode("regression")
+
+rand_forest(mtry = 10, trees = 2000) %>% 
+  set_engine("randomForest") %>% 
+  set_mode("regression")
+
+```
+
+
+
+```{r, eval=FALSE}
+rand_forest() %>% 
+  set_mode("classification") %>% 
+  set_engine("ranger", importance = "permutation")
+
+logistic_reg() %>% 
+  set_mode("classification") %>% 
+  set_engine("glmnet", nlambda = 10)
+
+decimal_tree() %>% 
+  set_mode("classification") %>% 
+  set_engine("rpart", parms = list(prior = c(.65, .35)))
+```
+
+### 関数の自作
+```{r}
+set_new_model("my_lm")
+```
+
+```{r}
+set_model_mode(model = "my_lm", mode = "regression")
+set_model_engine(model = "my_lm", mode = "regression", eng = "lm")
+set_dependency("my_lm", eng = "lm", pkg = "stats")
+show_model_info("my_lm")
+```
+```{r}
+my_lm <- function(mode = "regression") {
+  
+  if (mode != "regression") {
+    rlang::abort("this mode is not a known mode for my_lm()")
+  }
+  
+  new_model_spec(
+    "my_lm",
+    args = NULL,
+    eng_args = NULL,
+    mode = mode,
+    method = NULL,
+    engine = NULL
+  )
+}
+
+set_fit(
+  model = "my_lm",
+  mode  = "regression",
+  eng   = "lm",
+  value = list(
+    interface = "formula",
+    protect   = c("formula", "data"),
+    func      = c(pkg = "stats", fun = "lm"),
+    defaults  = list()
+  )
+)
+
+# set_pred(
+#   model  = "my_lm",
+#   eng    = "lm",
+#   mode   = "regression",
+#   type   = "numeric",
+#   value  = list(
+#     pre  = NULL,
+#     post = NULL,
+#     func = c(fun = "predict"),
+#     args = list(
+#       object = rlang::expr(object$fit),
+#       newdata = rlang::expr(newdata),
+#       type = "response"
+#     )
+#   )
+# )
+
+
+show_model_info("my_lm")
+```
+
+
+```{r, eval=FALSE}
+linear_reg() %>% 
+  translate(engine = "lm")
+
+my_lm_mod <- my_lm() %>% 
+  set_engine("lm") %>% 
+  set_mode("regression")
+
+fit_ed <- my_lm_mod %>% 
+  fit(Sepal.Length ~ Sepal.Width, data = iris)
+
+fit_ed
+```
+
+```{r}
+lm(Sepal.Length ~ Sepal.Width, data = iris)
+```
+
+# 2-4　yardstickパッケージによるモデルの評価
+```{r}
+library(yardstick)
+```
+
+```{r}
+ranger_rf <- rand_forest() %>% 
+  set_mode("regression") %>% 
+  set_engine("ranger") %>% 
+  fit(Sale_Price ~ ., data = ames_train)
+
+ames_test_res <- predict(ranger_rf, new_data = ames_test) %>% 
+  bind_cols(ames_test)
+
+ames_test_res %>% head()
+```
+```{r}
+ames_test_res %>% 
+  rmse(truth = Sale_Price, estimate = .pred)
+```
+```{r}
+library(tune)
+ggplot() +
+  geom_line(aes(x = Sale_Price, y = Sale_Price), data = ames_test_res) +
+  geom_point(aes(x = Sale_Price, y = .pred), data = ames_test_res, alpha = 0.5) +
+  labs(
+    y = "pred",
+    x = "Sale Price"
+  ) +
+  coord_equal()
+  # coord_obs_pred()
+```
+```{r}
+ames_test_res %>% 
+  mae(truth = Sale_Price, estimate = .pred)
+
+ames_test_res %>% 
+  metrics(truth = Sale_Price, estimate = .pred)
+```
+
+```{r}
+ames_metrics <- metric_set(rmse, rsq, mae, mpe, mape)
+
+ames_metrics %>% class()
+ames_metrics %>% args()
+
+ames_test_res %>% 
+  ames_metrics(truth = Sale_Price, estimate = .pred)
+
+```
+# 2-5　まとめと参考文献
+
+# Memo Ch.02
+- parnsipにおいての手順は大きく4つ。1. 使用したい機械学習モデルを選択 / 2. 分類か回帰か選択 / 3. 提供元パッケージや関数を設定 / 4. データを設定し、学習
+- set_mode / *(mode = )
+- set_engine / *(engine = ) 
+- translate()関数で元パッケージの関数の引数を確認できる
+- set_ags()関数で各種引数を設定可能
+- parsnip_addin()でGUIで機械学習モデルを選択可能
+- parsnipでは統一的な引数の命名規則があるため、パッケージ毎に異なる引数の差異の混乱が少ない
+- fit()関数とfit_xy()関数があり、後者は目的/説明変数をベクトル形式で与えることができる
+- パッケージ固有のハイパーパラメータに関しては、`set_engine()`関数内で指定が可能
+- yardstickパッケージによるモデル評価が可能
+- `rmse()` / `mae()`などの単独関数もあれば、`metric_set(rmse, rsq, mae, mpe, mape)`のようにまとめてセットすることも可能
+- ` ames_metrics <- metric_set(rmse, rsq, mae, mpe, mape); ames_test_res %>% ames_metrics(truth = Sale_Price, estimate = .pred)`
+
+
+```{r}
+library(yardstick)
+library(tune)
+library(parsnip)
+library(rsample)
+
+# - data 
+ames_spl <- ames_reg_data %>% 
+  initial_split(prop = 0.7)
+
+ames_train <- training(ames_spl)
+ames_test <- testing(ames_spl)
+
+# - model set
+lm_model <- linear_reg(mixture = 1, penalty = 1) %>% 
+  set_engine("lm") %>% 
+  set_mode("regression")
+
+# - modeling
+lm_formula_fit <- lm_model %>% 
+  fit(Sale_Price ~ Garage_Area, data = ames_train)
+
+# - evaluation
+
+ames_test_res <- predict(lm_formula_fit, new_data = ames_test) %>% 
+  bind_cols(ames_test)
+
+ames_metrics <- metric_set(rmse, rsq, mae, mpe, mape)
+ames_test_res %>% 
+  ames_metrics(truth = Sale_Price, estimate = .pred)
+
+ggplot() +
+  geom_line(aes(x = Sale_Price, y = Sale_Price), data = ames_test_res) +
+  geom_point(aes(x = Sale_Price, y = .pred), data = ames_test_res, alpha = 0.5) +
+  labs(
+    y = "pred",
+    x = "Sale Price"
+  ) +
+  coord_equal()
+```
+

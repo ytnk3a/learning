@@ -1,0 +1,431 @@
+---
+title: "7章: 地図を描画する"
+format: html
+editor: source
+---
+
+```{r}
+library(tidyverse)
+library(gapminder)
+library(socviz)
+library(ggpmisc)
+library(hrbrthemes)
+```
+
+## 7.1 アメリカ合衆国の州単位の地図
+
+```{r}
+election %>% 
+  select(state, total_vote, r_points, pct_trump, party, census)
+```
+
+### fig 7.2
+```{r, fig.height=6}
+
+party_colors <- c("#2E74C0", "#CB454A")
+p <- ggplot(subset(election, st %nin% "DC"), aes(x = r_points, y = reorder(state, r_points), color = party))
+
+p + geom_vline(xintercept = 0, color = "gray30") +
+  geom_point(size = 2) +
+  scale_color_manual(values = party_colors) +
+  scale_x_continuous(
+    breaks = c(-30, -20, -10, 0, 10, 20, 30, 40), 
+    labels = c("30\n(Clinton)", "20", "10", "0", "10", "20", "30", "40\n(Trump)")
+    ) +
+  facet_wrap(~ census, ncol = 1, scales = "free_y") +
+  # theme_minimal()
+  theme_ipsum()
+```
+
+### fig 7.3 
+```{r}
+library(maps)
+
+us_states <- map_data("state")
+
+ggplot(us_states, aes(x = long, y = lat, group = group)) +
+  geom_polygon(fill = "white", color = "gray20")
+
+ggplot(data = us_states, aes(x = long, y = lat, group = group)) +
+  geom_map(
+    data = us_states,
+    map = us_states,
+    fill = "white", color = "gray20",
+    aes(map_id = region)
+    )
+```
+
+日本地図を描きたいときは `mapdata`を読み込んでおくことが必要
+```{r}
+library(mapdata)
+jpn <- map_data("japan")
+
+ggplot(jpn, aes(x = long, y = lat, group = group)) +
+  geom_polygon(fill = "white", color = "gray20") +
+  coord_map()
+
+ggplot(data = jpn, aes(x = long, y = lat, group = group)) +
+  geom_map(
+    data = jpn,
+    map = jpn,
+    fill = "white", color = "gray20",
+    aes(map_id = region)
+    )  +
+  coord_map()
+```
+
+### fig 7.4
+```{r}
+
+ggplot(us_states, aes(x = long, y = lat, group = group, fill = region)) +
+  geom_polygon( color = "gray20") +
+  guides(fill = "none")
+```
+
+
+### fig 7.5
+```{r}
+ggplot(us_states, aes(x = long, y = lat, group = group, fill = region)) +
+  geom_polygon( color = "gray20") +
+  guides(fill = "none") +
+  coord_map(projection = "albers", lat0 = 39, lat1 = 45)
+
+ggplot(us_states, aes(x = long, y = lat, group = group, fill = region)) +
+  geom_polygon( color = "gray20") +
+  guides(fill = "none") +
+  coord_map(projection = "albers", lat0 = 39, lat1 = 60)
+
+ggplot(us_states, aes(x = long, y = lat, group = group, fill = region)) +
+  geom_polygon( color = "gray20") +
+  guides(fill = "none") +
+  coord_map(projection = "albers", lat0 = 20, lat1 = 45)
+```
+
+```{r}
+ggplot(jpn, aes(x = long, y = lat, group = group)) +
+  geom_polygon(fill = "white", color = "gray20") +
+  coord_map(projection = "albers", lat0 = 39, lat1 = 45)
+
+ggplot(jpn, aes(x = long, y = lat, group = group)) +
+  geom_polygon(fill = "white", color = "gray20") +
+  coord_map(projection = "albers", lat0 = 47.5, lat1 = 28.5)
+
+ggplot(jpn, aes(x = long, y = lat, group = group)) +
+  geom_polygon(fill = "white", color = "gray20") +
+  coord_map(projection = "albers", lat0 = 33, lat1 = 44)
+
+ggplot(jpn, aes(x = long, y = lat, group = group)) +
+  geom_polygon(fill = "white", color = "gray20") +
+  coord_map(projection = "albers", lat0 = 44, lat1 = 33) # lat0/1: 標準緯線
+```
+アルベルス図法では、2つの標準緯線が設定され、その緯度と緯度間の距離が面積の歪みを最小限に抑えるように設計されています.﻿
+
+
+日本の国土地理院が発行する「全国都道府県市区町村別面積調」では、平成26年面積調から、面積測定に当たり2本の標準緯線を北緯33°及び北緯44°、中央経線を東経135°とするアルベルス正積円錐図法を採用
+
+```{r, eval=FALSE}
+library(mapproj)
+projlist <- c("aitoff", "albers", "azequalarea", "azequidist", "bicentric",
+ "bonne", "conic", "cylequalarea", "cylindrical", "eisenlohr", "elliptic",
+ "fisheye", "gall", "gilbert", "guyou", "harrison", "hex", "homing",
+ "lagrange", "lambert", "laue", "lune", "mercator", "mollweide", "newyorker",
+ "orthographic", "perspective", "polyconic", "rectangular", "simpleconic",
+ "sinusoidal", "tetra", "trapezoidal")
+x <- seq(-100, 0, 10)
+y <- seq(-45, 45, 10)
+xy <- expand.grid(x=x, y=y)
+pf <- c(0, 2, 0, 0, 1, 1, 1, 1, 0, 0, 1, 1, 1, 0, 0, 2, 0, 1, 0, 2, 0, 2,
+ 0, 0, 1, 0, 1, 0, 1, 2, 0, 0, 2)
+res <- vector(mode="list", length=length(projlist))
+for (i in seq(along=projlist)) {
+ if (pf[i] == 0) res[[i]] <- mapproject(xy$x, xy$y, projlist[i])
+ else if (pf[i] == 1) res[[i]] <- mapproject(xy$x, xy$y, projlist[i], 0)
+ else res[[i]] <- mapproject(xy$x, xy$y, projlist[i], c(0,0))
+}
+names(res) <- projlist
+lapply(res, function(p) rbind(p$x, p$y))
+```
+
+### fig 7.6
+
+```{r}
+election$region <- tolower(election$state)
+us_states_elec <- left_join(us_states, election)
+
+p <- ggplot(us_states_elec, aes(x = long, y = lat, group = group, fill = party))
+p + geom_polygon(color = "gray80", size = 0.1) +
+  coord_map(projection = "albers", lat0 = 39, lat1 = 45)
+```
+
+### fig.7.7
+```{r}
+p <- ggplot(us_states_elec, aes(x = long, y = lat, group = group, fill = party))
+p + geom_polygon(color = "gray80", size = 0.1) +
+  scale_fill_manual(values = party_colors) + 
+  coord_map(projection = "albers", lat0 = 39, lat1 = 45)
+```
+
+### fig.7.8
+```{r}
+p <- ggplot(us_states_elec, aes(x = long, y = lat, group = group, fill = pct_trump))
+p + geom_polygon(color = "gray80", size = 0.1) +
+  coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
+  scale_fill_gradient2(low = "white", high = "#CB454A")
+```
+### fig.7.9
+```{r}
+p <- ggplot(us_states_elec, aes(x = long, y = lat, group = group, fill = d_points))
+p + geom_polygon(color = "gray80", size = 0.1) +
+  coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
+  scale_fill_gradient2(
+    low = "red", mid = scales::muted("purple"), high = "blue",
+    breaks = c(-25, 0, 25, 50, 75)
+    ) +
+  NULL
+
+p + geom_polygon(color = "gray80", size = 0.1) +
+  coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
+  scale_fill_gradient2(
+    low = "red", mid = "purple", high = "blue",
+    breaks = c(-25, 0, 25, 50, 75)
+    ) +
+  NULL
+```
+```{r}
+
+```
+
+
+### fig.7.10
+```{r}
+p <- ggplot(
+  subset(us_states_elec, region %nin% "district of columbia"), 
+  aes(x = long, y = lat, group = group, fill = d_points))
+p + geom_polygon(color = "gray80", size = 0.1) +
+  coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
+  scale_fill_gradient2(
+    low = "red", mid = scales::muted("purple"), high = "blue"
+    ) +
+  NULL
+```
+
+```{r}
+ggplot(jpn %>% mutate(pct = runif(n(), 0, 1)), aes(x = long, y = lat, group = group, fill = pct)) +
+  geom_polygon(color = "gray80", size = 0.1) +
+  scale_fill_gradient2(
+    low = "red", mid = scales::muted("purple"), high = "blue"
+  ) +
+  coord_map(projection = "albers", lat0 = 44, lat1 = 33) # lat0/1: 標準緯線
+```
+
+## 7.2 階級区分に頼らないアメリカ合衆国の地図
+
+```{r}
+country_full <- left_join(
+  county_map,
+  county_data,
+  by = "id"
+)
+```
+
+
+### fig 7.11
+```{r}
+p <- ggplot(data = country_full, aes(x = long, y = lat, fill = pop_dens, group = group))
+
+p + geom_polygon(color = "gray90", size = 0.05) + 
+  coord_equal() +
+  scale_fill_brewer(palette = "Blues") +
+  labs(title = "population per sqaure mile")
+```
+### fig 7.12
+```{r}
+p <- ggplot(data = country_full, aes(x = long, y = lat, fill = pct_black, group = group))
+
+p + geom_polygon(color = "gray90", size = 0.05) + 
+  coord_equal() +
+  scale_fill_brewer(palette = "Greens") +
+  labs(title = "population per sqaure mile")
+```
+```{r}
+orenge_pal <- RColorBrewer::brewer.pal(n = 6, name = "Oranges")
+
+p <- ggplot(data = country_full, aes(x = long, y = lat, fill = su_gun6, group = group))
+
+p + geom_polygon(color = "gray90", size = 0.05) + 
+  coord_equal() +
+  scale_fill_manual(values = orenge_pal) +
+  labs(title = "population per sqaure mile")
+```
+```{r}
+orenge_rev <- rev(RColorBrewer::brewer.pal(n = 6, name = "Oranges"))
+
+p <- ggplot(data = country_full, aes(x = long, y = lat, fill = pop_dens6, group = group))
+
+p + geom_polygon(color = "gray90", size = 0.05) + 
+  coord_equal() +
+  scale_fill_manual(values = orenge_rev) +
+  labs(title = "population per sqaure mile")
+```
+
+
+## 7.3 地理的な空間配置を考慮したグラフ
+
+### fig 7.14
+```{r}
+library(statebins)
+library(viridis)
+statebins(
+  state_data = election,
+  state_col = "state",
+  value_col = "pct_trump",
+  dark_label = "white",
+  name = "Percent Trump",
+  palette = "Reds",
+  direction = 1,
+  font_size = 3
+) +
+  theme_statebins()
+
+ggplot(election) +
+  geom_statebins(aes(fill = pct_trump, state = state)) +
+  scale_fill_viridis() +
+  labs(fill = "% Trump") + 
+  theme_statebins()
+```
+
+
+### fig 7.14
+```{r}
+statebins(
+  state_data = subset(election, st %nin% "DC"),
+  state_col = "state",
+  value_col = "pct_clinton",
+  light_label = "black",
+  name = "Percent Clinton",
+  palette = "Blues",
+  direction = 1,
+  font_size = 3
+) +
+  theme_statebins()
+```
+
+### fig 7.15
+
+```{r}
+statebins(
+  state_data = election,
+  state_col = "state",
+  value_col = "party",
+  light_label = "white",
+  name = "Winner",
+  ggplot2_scale_function = scale_fill_manual,
+  values = c(Republican = "darkred", Democratic = "royalblue"),
+  labels = c("Clinton", "Trump")
+) +
+  theme_statebins()
+```
+
+```{r}
+election %>% 
+  mutate(pct_trump = cut(pct_trump, breaks = 4, labels = c("4-21", "21-37", "37-53", "53-70"))) %>% 
+  statebins(
+    state_col = "state",
+    value_col = "pct_trump",
+    dark_label = "black",
+    palette = "Reds",
+    ggplot2_scale_function = scale_fill_brewer,
+    font_size = 3,
+    name = "% Trump",
+  ) +
+  theme_statebins()
+```
+## 7.4 複数の地図を1枚の図にまとめる
+
+```{r}
+opiates
+```
+
+```{r}
+opiates$region <- tolower(opiates$state)
+opiates_map <- left_join(us_states, opiates)
+```
+```{r}
+ggplot(
+  data = subset(opiates_map, year > 1999),
+  aes(x = long, y = lat, group = group, fill = adjusted)
+  ) +
+  geom_polygon(color = "gray90", size = 0.05) +
+  coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
+  scale_fill_viridis_c(option = "plasma") +
+  facet_wrap(~ year, ncol = 3)
+```
+
+## 7.5 そのデータは本当に空間情報を含みますか
+### fig 7.17
+```{r}
+ggplot(
+  opiates,
+  aes(x = year, y = adjusted, group = state)
+) +
+  geom_line(color = "gray70")
+```
+
+### fig 7.18
+
+```{r}
+
+ggplot(
+  data = drop_na(opiates, division_name),
+  aes(x = year, y = adjusted)
+) +
+  geom_line(color = "gray70", aes(group = state))
+```
+
+```{r}
+ggplot(
+  data = drop_na(opiates, division_name),
+  aes(x = year, y = adjusted)
+) +
+  geom_line(color = "gray70", aes(group = state)) +
+  geom_smooth(aes(group = division_name), se = FALSE)
+```
+
+```{r}
+library(ggrepel)
+ggplot(
+  data = drop_na(opiates, division_name),
+  aes(x = year, y = adjusted)
+) +
+  geom_line(color = "gray70", aes(group = state)) +
+  geom_smooth(aes(group = division_name), se = FALSE) +
+  geom_text_repel(
+    data = subset(opiates, year == max(year) & abbr != "DC"),
+    aes(x = year, y = adjusted, label = abbr),
+    size = 1.8,
+    segment.color = NA,
+    nudge_x = 0.5
+  ) +
+  facet_wrap(~ reorder(division_name, -adjusted, na.rm = TRUE), nrow = 3) +
+  theme_ipsum_tw()
+
+ggplot(
+  data = drop_na(opiates, division_name),
+  aes(x = year, y = adjusted)
+) +
+  geom_line(color = "gray70", aes(group = state)) +
+  geom_smooth(aes(group = division_name), se = FALSE) +
+  geom_text_repel(
+    data = subset(opiates, year == max(year) & abbr != "DC"),
+    aes(x = year, y = adjusted, label = abbr),
+    size = 1.8,
+    segment.color = NA,
+    nudge_x = 0.5
+  ) +
+  facet_wrap(~ division_name, nrow = 3) +
+  theme_ipsum_pub()
+```
+
+- `facet_wrap(~ reorder(division_name, -adjusted, na.rm = TRUE), nrow = 3)`
+- `coord_map(projection = "albers", lat0 = 44, lat1 = 33) # lat0/1: 標準緯線`
+  

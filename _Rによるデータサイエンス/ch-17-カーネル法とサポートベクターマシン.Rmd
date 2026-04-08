@@ -1,0 +1,145 @@
+---
+title: "Ch.17 カーネル法とサポートベクターマシン"
+output: html_document
+date: "2024-01-01"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(kernlab)
+```
+
+# カーネルとは
+
+カーネル法とは、カーネル関数を借りて、データを表現しなおす方法
+関数 $ \Phi(x) $ を用いて個体の特徴・属性ベクトルに変換する
+
+# カーネル主成分分析
+
+1. カーネル関数 $K(x,z)$ を決める
+2. データから写像行列 $K_{n \times n}$ 
+3. $K_{n \ times n} $ の固有値と固有ベクトルを求める
+4. 固有値と固有ベクトルを正規化する
+
+`kpca`における引数に関して
+kernel関数の選択肢
+- rbfdot: ガウシアン
+- polydot: 多項式
+- vanilladot: 線形
+- tanhdot: タンジェント
+- laplacedot: ラプラシアン
+- besseldot: ベッセル
+- anovadot: ANOVA RBF
+- splinedot: スプライン
+
+```{r}
+x <- as.matrix(iris[, 1:4])
+
+iris_kpc1 <- kpca(x, kernel = "rbfdot",  kpar = list(sigma = 0.1), features = 2)
+iris_kpc3 <- kpca(x, kernel = "polydot", kpar = list(degree = 1), features = 2)
+iris_kpc5 <- kpca(x, kernel = "polydot", kpar = list(degree = 5), features = 2)
+iris_kpc6 <- kpca(x, kernel = "polydot", kpar = list(degree = 6), features = 2)
+
+op <- par(mfrow = c(2, 2), mai = c(rep(0.3, 4)))
+plot(rotated(iris_kpc1), col = as.integer(iris[, 5]))
+plot(rotated(iris_kpc3), col = as.integer(iris[, 5]))
+plot(rotated(iris_kpc5), col = as.integer(iris[, 5]))
+plot(rotated(iris_kpc6), col = as.integer(iris[, 5]))
+par(op)
+```
+
+
+# サポートベクターマシン
+
+SVMは線形分離が可能な高次元の仮想空間において、線形的なアプローチで学習を行う手法
+高次元の分類問題が得意とされる
+
+下記の線形関数を用いる
+- $y_k$ は目的変数
+- $x_k$ は個体の特徴ベクトル
+
+$$
+y = f(x) = \sum^p_{i=1} w_i x_i + b = w^tx + b
+$$
+
+SVMはマージンが最大になる分類境界を求める
+
+
+`ksvm`関数のtype引数では分類と回帰のタイプを指定する
+質的データではC-svc分類法が、量的データではeps-svr回帰が用いられるようになっている
+分類方法としては、"nu-svc" / "C-bsvc"、回帰方法では"nu-svr" / "eps-svr"が用意されている
+
+```{r}
+data(spam)
+
+set.seed(50)
+
+tr_num <- sample(4601, 2500)
+
+spam_train <- spam[tr_num, ]
+spam_test <- spam[-tr_num, ]
+```
+
+```{r}
+set.seed(50)
+
+spam_svm <- ksvm(type ~ ., data = spam_train, cross = 3)
+spam_svm
+```
+
+```{r}
+spam_pred <- predict(spam_svm, spam_test[, -58])
+
+spam_tab <- table(spam_test[, 58], spam_pred)
+
+spam_tab
+
+1 - sum(diag(spam_tab)) / sum(spam_tab)
+```
+
+説明変数が2つの場合は下記のようにプロットで表すことができる
+黒丸がサポートベクターであり、マージン最大に寄与するのは、
+このサポートベクターのみである
+
+
+```{r}
+y <- as.matrix(iris[51:150, 5])
+
+iris1 <- data.frame(iris[51:150, 3:4], y = as.factor(y))
+
+set.seed(0)
+
+ir_ksvm <- ksvm(y ~ ., data = iris1)
+plot(ir_ksvm, data = iris1[, 1:2])
+
+```
+回帰分析のケーススタディ
+```{r}
+
+x1 <- seq(-10, 10, 0.1)
+y1 <- 50 * sin(x1) + x1^2 + 10 * rnorm(length(x1), 0, 1)
+
+head(x1)
+head(y1)
+```
+
+```{r}
+xy_svm <- ksvm(x1, y1, epsilon = 0.01, kpar = list(sigma = 16))
+svm_pred <- predict(xy_svm, x1)
+
+plot(x1, y1, type = "l")
+lines(x1, svm_pred, col = "red", lty = 2)
+legend(-2, 120, c("obs", "pred"), lty = c(1, 2), col = c(1, 2))
+```
+
+# 
+kernlabには
+- 最小2乗法によるSVMの関数 `lssvm`
+- カーネルヘッビアンアルゴリズムによる主成分分析 `phc`
+- カーネル正準相関分析関数 `kcca`
+- 適合ベクターマシン関数 `rvm` relevance vector machine がある
+
+また、svmに関しては
+klaR, e1071にも関連関数がある
+

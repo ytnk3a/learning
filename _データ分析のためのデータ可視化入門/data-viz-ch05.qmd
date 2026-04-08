@@ -1,0 +1,386 @@
+---
+title: "5章：データの整形・ラベル・メモの追加"
+format: html
+editor: source
+---
+
+##
+
+```{r}
+library(tidyverse)
+library(gapminder)
+library(socviz)
+```
+
+```{r}
+rel_by_region <- gss_sm %>% 
+  group_by(bigregion, religion) %>% 
+  summarise(N = n()) %>% 
+  mutate(
+    freq = N / sum(N),
+    pct = round((freq * 100), 0)
+    )
+
+rel_by_region
+```
+```{r}
+rel_by_region %>% 
+  group_by(bigregion) %>% 
+  summarise(total = sum(pct))
+```
+
+```{r}
+p <- ggplot(rel_by_region, aes(x = bigregion, y = pct, fill = religion))
+
+p + geom_col(position = "dodge2") +
+  labs(x = "Region", y = "Percent", fill = "Religion") +
+  theme(legend.position = "top")
+
+p + geom_col(position = "dodge") +
+  labs(x = "Region", y = "Percent", fill = "Religion") +
+  theme(legend.position = "top")
+```
+```{r}
+p <- ggplot(rel_by_region, aes(x = religion, y = pct, fill = religion))
+
+p + geom_col(position = "dodge2") +
+  labs(x = NULL, y = "Percent", fill = "Religion") +
+  theme(legend.position = "top") +
+  guides(fill = "none") +
+  coord_flip() +
+  facet_grid(~ bigregion)
+
+```
+```{r}
+p <- ggplot(rel_by_region, aes(x = pct, y = religion, fill = religion))
+
+p + geom_col(position = "dodge2") +
+  labs(y = NULL, x = "Percent", fill = "Religion") +
+  theme(legend.position = "top") +
+  guides(fill = "none") +
+  facet_grid(cols = vars(bigregion))
+```
+
+
+## 5.2 グループ化・カテゴリ化された連続変数の取り扱い
+```{r}
+organdata
+```
+
+### fig 5.4
+```{r}
+p <- ggplot(organdata, aes(x = year, y = donors))
+
+p + geom_point()
+```
+
+
+### fig 5.5
+```{r}
+p <- ggplot(
+  data = organdata,
+  aes(x = year, y = donors)
+  )
+
+p + geom_line(aes(group = country)) +
+  facet_wrap(~ country)
+```
+
+### fig 5.6
+```{r}
+p <- ggplot(data = organdata, 
+            aes(x = country, y = donors))
+
+p + geom_boxplot()
+p + geom_boxplot() + 
+  theme(axis.text.x = element_text(angle = 30, hjust = 0.9))
+```
+
+### fig 5.7
+```{r}
+p <- ggplot(organdata, aes(x = country, y = donors))
+
+p + geom_boxplot() +
+  coord_flip()
+```
+
+### fig 5.8
+```{r}
+p <- ggplot(organdata, aes(x = reorder(country, donors, na.rm = TRUE), y = donors))
+
+p + geom_boxplot() +
+  labs(x = NULL) +
+  coord_flip()
+```
+
+### fig 5.9
+```{r}
+p <- ggplot(
+  organdata, 
+  aes(x = reorder(country, donors, na.rm = TRUE), y = donors, fill = world)
+  )
+
+p + geom_boxplot() +
+  labs(x = NULL) +
+  coord_flip()
+```
+
+### fig 5.10
+```{r}
+p <- ggplot(
+  organdata, 
+  aes(x = reorder(country, donors, na.rm = TRUE), y = donors, color = world)
+  )
+
+p + geom_point() +
+  labs(x = NULL) +
+  coord_flip() +
+  theme(legend.position = "top")
+```
+
+### fig 5.11
+```{r}
+p <- ggplot(
+  organdata, 
+  aes(x = reorder(country, donors, na.rm = TRUE), y = donors, color = world)
+  )
+
+p + geom_jitter() +
+  labs(x = NULL) +
+  coord_flip() +
+  theme(legend.position = "top")
+```
+
+### fig 5.12
+```{r}
+p <- ggplot(
+  organdata, 
+  aes(x = reorder(country, donors, na.rm = TRUE), y = donors, color = world)
+  )
+
+p + geom_jitter(position = position_jitter(width = 0.1)) +
+  labs(x = NULL) +
+  coord_flip() +
+  theme(legend.position = "top")
+```
+
+### make: data set
+```{r}
+by_country <- organdata %>% 
+  group_by(consent_law, country) %>% 
+  summarise(across(
+    is.numeric, 
+    list(mean = mean, sd = sd), na.rm = TRUE,
+    .names = "{.col}_{.fn}"
+    )) %>% 
+  ungroup()
+
+by_country %>% glimpse()
+```
+
+### fig 5.13
+```{r}
+p <- ggplot(by_country, aes(x = donors_mean, y = reorder(country, donors_mean), color = consent_law))
+
+p + geom_point(size = 3) +
+  labs(
+    x = "Donor Procurement Rate",
+    y = NULL,
+    color = "Consent Law")
+```
+
+### fig 5.14
+```{r}
+p <- ggplot(by_country, aes(x = donors_mean, y = reorder(country, donors_mean)))
+
+p + geom_point(size = 3) +
+  facet_wrap(~ consent_law, scales = "free_y", ncol = 1) +
+  theme(strip.text = element_text(
+    hjust = 0, margin = margin(1, 0, 1, 0), 
+    size = rel(1.1), face = "bold"
+  ))
+
+p + geom_point(size = 3) +
+  facet_wrap(~ consent_law, scales = "free_y", ncol = 1) +
+  theme(
+    strip.text = element_text(
+      hjust = 0, margin = margin(1, 0, 1, 0.5), 
+      size = rel(1.1), face = "bold"
+    ),
+    strip.background = element_blank()
+    )
+```
+### fig 5.15
+```{r}
+p <- ggplot(by_country, aes(x = donors_mean, y = reorder(country, donors_mean)))
+
+p + geom_point(size = 3) +
+  geom_pointrange(aes(xmin = donors_mean - donors_sd, xmax = donors_mean + donors_sd)) 
+
+```
+
+## 5.3
+### fig 5.16
+```{r}
+p <- ggplot(by_country, aes(x = roads_mean , y = donors_mean))
+
+p + geom_point() +
+  geom_text(aes(label = country))
+```
+
+### fig 5.17
+```{r}
+p + geom_point() +
+  geom_text(aes(label = country), hjust = 0)
+```
+
+### fig 5.18
+```{r}
+library(ggrepel)
+
+p <- ggplot(elections_historic, aes(x = popular_pct, y = ec_pct, label = winner_label))
+
+p + geom_hline(yintercept = 0.5) +
+  geom_vline(xintercept = 0.5) +
+  geom_point() +
+  geom_text_repel()
+```
+
+## 5.4 特定のデータへのラベリング
+
+### fig 5.19
+```{r}
+p <- ggplot(by_country, aes(x = gdp_mean, y = health_mean))
+
+p + geom_point() +
+  geom_text_repel(
+    data = subset(by_country, gdp_mean > 25000),
+    aes(label = country)
+    )
+```
+
+### fig 5.19
+```{r}
+p <- ggplot(by_country, aes(x = gdp_mean, y = health_mean))
+
+p + geom_point() +
+  geom_text_repel(
+    data = subset(by_country, gdp_mean > 25000, health_mean < 1500 | country %in% "Belgium"),
+    aes(label = country)
+    )
+```
+
+### fig 5.20
+```{r}
+organdata <- organdata %>% 
+  mutate(ind = if_else(ccode %in% c("Ita", "Spa") & year > 1998, TRUE, FALSE))
+
+p <- ggplot(organdata, aes(x = roads, y = donors, color = ind))
+
+p + geom_point() +
+  geom_text_repel(
+    data = subset(organdata, ind),
+    aes(label = ccode))
+```
+
+## 5.5 図内への描画と書き込み
+
+### fig 5.21
+```{r}
+p <- ggplot(
+  data = organdata,
+  aes(x = roads, y = donors)
+  )
+
+p + geom_point() +
+  annotate(
+    geom = "text",
+    x = 91,
+    y = 33,
+    label = "A suprisingly high \n recovery rate.",
+    hjust = 0
+  )
+```
+
+### fig 5.22
+```{r}
+p <- ggplot(data = organdata, aes(x = roads, y = donors))
+
+p + geom_point() +
+  annotate(geom = "rect", xmin = 125, xmax = 155, ymin = 30, ymax = 35, fill = "red", alpha = 0.2) +
+  annotate(
+    geom = "text", x = 157, y = 33,
+    label = "A suprisingly high \n recovery rate.",
+    hjust = 0)
+```
+
+## 5.6 scale_関数・guides()関数・theme()関数
+
+```{r}
+p <- ggplot(organdata, aes(x = roads, y = donors, color = world))
+
+p + geom_point() +
+  scale_x_log10() +
+  scale_y_continuous(breaks = c(5, 10, 25),
+                     labels = c("Five", "Fifteen", "Twenty Five"))
+```
+
+### fig 5.26
+```{r}
+p <- ggplot(organdata, aes(x = roads, y = donors, color = world))
+
+p + geom_point() +
+  scale_color_discrete(labels = c("Corporatist", "Liberal", "Social", "Unclassified"))
+```
+
+### fig 5.27
+
+```{r}
+p <- ggplot(organdata, aes(x = roads, y = donors, color = world))
+
+p + geom_point() +
+  guides(color = "none")
+```
+
+```{r}
+df <- data.frame(
+  trt = factor(c(1, 1, 2, 2)),
+  resp = c(1, 5, 3, 4),
+  group = factor(c(1, 2, 1, 2)),
+  upper = c(1.1, 5.3, 3.3, 4.2),
+  lower = c(0.8, 4.6, 2.4, 3.6)
+)
+
+p <- ggplot(df, aes(trt, resp, colour = group))
+p + geom_linerange(aes(ymin = lower, ymax = upper)) +
+  ggtitle("geom_linerange")
+p + geom_pointrange(aes(ymin = lower, ymax = upper)) + 
+  ggtitle("geom_pointrange")
+p + geom_crossbar(aes(ymin = lower, ymax = upper), width = 0.2) + 
+  ggtitle("geom_crossbar")
+p + geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2) + 
+  ggtitle("geom_errorbar")
+
+```
+
+```{r}
+p <- ggplot(mpg, aes(class, hwy))
+p + geom_boxplot(
+  outlier.colour = "red", 
+  outlier.shape = 1,
+  notch = TRUE
+  )
+p + geom_boxplot(notch = TRUE, notchwidth = 0.8)
+p + geom_boxplot(notch = TRUE, notchwidth = 0.2)
+p + geom_boxplot(varwidth = TRUE)
+p + geom_boxplot(varwidth = FALSE)
+# If FALSE (default) make a standard box plot. If TRUE, boxes are drawn with widths proportional to the square-roots of the number of observations in the groups (possibly weighted, using the weight aesthetic)
+```
+
+```{r}
+p + geom_boxplot()
+p + geom_boxplot(aes(weight = displ), varwidth = TRUE)
+# If FALSE (default) make a standard box plot. 
+# If TRUE, boxes are drawn with widths proportional to the square-roots of the number of 
+# observations in the groups (possibly weighted, using the weight aesthetic)
+```

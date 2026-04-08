@@ -1,0 +1,138 @@
+---
+title: "Ch.07"
+output: html_document
+date: "2023-08-08"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+kaiteki <- c(6, 5, 6, 7, 2, 1, 1, 0, 7, 8, 8, 9, 8, 7, 6, 7)
+size <- factor(c(rep("S", 8), rep("L", 8)))
+student <- factor(c(rep(1, 4), rep(2, 4), rep(1, 4), rep(2, 4)))
+summary(aov(kaiteki ~ size + student + size:student))
+```
+
+```{r}
+# figure 7.2 (a)
+par(mfrow = c(1, 2))
+d <- c(6, 5, 6, 7, 2, 1, 1, 0, 7, 8, 8, 9, 8, 7, 6, 7)
+one <-　c(mean(d[1:4]), mean(d[9:12]))
+two <-　c(mean(d[5:8]), mean(d[13:16]))
+plot(one, xlim=c(0.5, 2.5),ylim=c(0, 10), type="b", xlab="", ylab="desirebility", pch=1, xaxt="n")
+points(two, type="b", pch=2)
+axis(side=1, at=1:2, labels=c("small", "large"))
+
+
+# figure 7.2 (b)
+d <- c(6, 5, 6, 7, 2, 1, 1, 0, 7, 8, 8, 9, 8, 7, 6, 7)
+small <- c(mean(d[1:4]), mean(d[5:8]))
+large <- c(mean(d[9:12]), mean(d[13:16]))
+plot(small, xlim=c(0.5, 2.5), ylim=c(0, 10), type="b", xlab="", ylab="desirebility",pch=1,xaxt="n")
+points(large, type="b", pch=2)
+axis(side=1, at=1:2, labels=c("one", "two"))
+```
+
+## 7.3 二元分散分析の原理と計算法
+
+```{r}
+plant <- c(36.1, 34.1, 32.7, 29.2, 26.5, 32.8, 36.2, 29.2, 30.8, 36.1, 
+           32.6, 33.8, 37.3, 32.5, 35.7, 33,   41.9, 34.4, 30.9, 35.1,
+           24.4, 22.8, 23.5, 33.7, 23.7, 25.7, 26.8, 23,   28.8, 24.5,
+           42.1, 34.1, 36.5, 36.5, 36.8, 34.5, 34.9, 37.2, 28.9, 39.1)
+
+soil <- c(rep(1, 20), rep(2, 20))
+
+ft <- c(rep(1, 10), rep(2, 10), rep(1, 10), rep(2, 10))
+
+summary(aov(plant ~ soil + ft + soil:ft))
+```
+
+```{r}
+plant <- c(36.1, 34.1, 32.7, 29.2, 26.5, 32.8, 36.2, 29.2, 30.8, 36.1, 
+           32.6, 33.8, 37.3, 32.5, 35.7, 33,   41.9, 34.4, 30.9, 35.1,
+           24.4, 22.8, 23.5, 33.7, 23.7, 25.7, 26.8, 23,   28.8, 24.5,
+           42.1, 34.1, 36.5, 36.5, 36.8, 34.5, 34.9, 37.2, 28.9, 39.1)
+
+soil <- c(rep(1, 20), rep(2, 20))
+
+ft <- c(rep(1, 10), rep(2, 10), rep(1, 10), rep(2, 10))
+# 総平方和を計算
+total_ss <- sum((plant - mean(plant))^2)
+total_ss
+df_ttl <- 2 * 2 * 10
+
+# グループ間平方和を計算
+group_ss <- 10 * (mean(plant[1:10]) - mean(plant))^2 + 
+  10 * (mean(plant[11:20]) - mean(plant))^2 + 
+  10 * (mean(plant[21:30]) - mean(plant))^2 + 
+  10 * (mean(plant[31:40]) - mean(plant))^2 
+group_ss
+df_grp <- 2 * 2 - 1
+
+# 土壌効果の平方和を計算
+soil_ss <- 20 * (mean(plant[1:20]) - mean(plant))^2 + 20 * (mean(plant[21:40])- mean(plant))^2
+soil_ss
+df_soil <- 1
+
+# 施肥効果の平方和を計算
+ft_ss <- 20 * (mean(plant[c(1:10, 21:30)]) - mean(plant))^2 + 20 * (mean(plant[c(11:20, 31:40)])- mean(plant))^2
+ft_ss
+df_ft <- 1
+
+# 交互作用の平方和を計算
+inter_ss <- group_ss - ft_ss - soil_ss
+inter_ss
+df_inter <- (2 - 1) * (2 - 1)
+
+# グループ内平方和ｗ計算
+within_ss <- sum((plant[1:10] - mean(plant[1:10]))^2) + 
+  sum((plant[11:20] - mean(plant[11:20]))^2) + 
+  sum((plant[21:30] - mean(plant[21:30]))^2) + 
+  sum((plant[31:40] - mean(plant[31:40]))^2) 
+within_ss
+df_within <- 4 * (10 - 1)
+
+# 平均平方を計算
+ms_soil <- soil_ss / df_soil
+ms_soil
+ms_ft <- ft_ss / df_ft
+ms_ft
+ms_inter <- inter_ss / df_inter
+ms_inter
+
+ms_within <- within_ss / df_within
+
+# F値を計算
+f_soil <- ms_soil / ms_within
+f_soil
+
+f_ft <- ms_ft / ms_within
+f_ft
+
+f_inter <- ms_inter / ms_within
+f_inter
+
+# p-valueを計算
+1 - pf(f_soil, df_soil, df_within)
+1 - pf(f_soil, df_soil, df_within)
+1 - pf(f_soil, df_soil, df_within)
+
+```
+## 7.4 線形混合モデル
+```{r}
+wt <- c(
+  125, 124, 127, 121, 127, 123, 126, 122, 121, 128,
+  127, 124, 126, 127, 123, 128, 123, 129, 113, 114,
+  113, 114, 115, 109, 110, 109, 113, 112, 111, 114,
+  108, 109, 107, 112, 113, 111
+  )
+treat <- factor(c(rep("f", 18), rep("c", 18)))
+block <- factor(c(rep(1, 6), rep(2, 6), rep(3, 6), rep(1, 6), rep(2, 6), rep(3, 6)))
+
+
+summary(aov(wt ~ treat + Error(block/treat)))
+```
+

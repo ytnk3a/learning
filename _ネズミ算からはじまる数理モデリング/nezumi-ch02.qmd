@@ -1,0 +1,948 @@
+---
+title: "nuzumi-ch02"
+format: html
+---
+
+# 周りの状況からの影響
+
+## .1 負の密度効果
+```{r}
+# sigma <- 1
+# m0 <- 1
+i_end <- 50
+cn <- rep(0, i_end)
+theta <- 4.0
+r0 <- 0.67
+
+a <- 100
+cn[1] <- 5
+
+for (i in 1:i_end) {
+  
+  # cn[i+1] <- sigma * m0 / 2 * cn[i] / (1 + (2 * cn[i] / a)^theta)
+  cn[i+1] <- r0 * cn[i] / (1 + (2 * cn[i] / a)^theta)
+  
+}
+
+plot(cn, type = "b")
+
+bev_holt <- function(r0, theta) {
+  
+  i_end <- 50
+  cn <- rep(0, i_end)
+  theta <- 4.0
+  # r0 <- 0.67
+  
+  a <- 100
+  cn[1] <- 5
+  
+  for (i in 1:i_end) {
+    
+    # cn[i+1] <- sigma * m0 / 2 * cn[i] / (1 + (2 * cn[i] / a)^theta)
+    cn[i+1] <- r0 * cn[i] / (1 + (2 * cn[i] / a)^theta)
+    
+  }
+  
+  plot(cn, type = "b", main = paste0("R0=", r0))
+  
+}
+
+bev_holt(0.67, 4.0)
+bev_holt(1.66, 4.0)
+bev_holt(2.33, 4.0)
+bev_holt(3, 4.0)
+bev_holt(4, 4.0)
+bev_holt(7, 4.0)
+```
+```{r}
+bev_holt2 <- function(c_initial) {
+  
+  i_end <- 50
+  cn <- rep(0, i_end)
+  theta <- 1.0
+  r0 <- 2.0
+  
+  a <- 100
+  cn[1] <- c_initial
+  
+  for (i in 1:i_end) {
+    
+    # cn[i+1] <- sigma * m0 / 2 * cn[i] / (1 + (2 * cn[i] / a)^theta)
+    cn[i+1] <- r0 * cn[i] / (1 + (2 * cn[i] / a)^theta)
+    
+  }
+  
+  return(2 * cn / a)
+  
+}
+
+c1 <- bev_holt2(5.0)
+
+plot(bev_holt2(10.0), type = "b", ylim = c(0, 2), xlim = c(0, 20))
+lines(bev_holt2(30.0), type = "b")
+lines(bev_holt2(50.0), type = "b")
+lines(bev_holt2(75.0), type = "b")
+lines(bev_holt2(100.0), type = "b")
+```
+```{r}
+bev_holt3 <- function(theta) {
+  
+  i_end <- 400
+  cn <- rep(0, i_end)
+  # theta <- 1.0
+  r0_list <- seq(1, 20, by = 0.05)
+  
+  a <- 100
+  cn[1] <- 5
+  
+  for (j in seq_along(r0_list)) {
+    
+    r0 <- r0_list[j]
+    for (i in 1:(i_end-1)) {
+      
+      # cn[i+1] <- sigma * m0 / 2 * cn[i] / (1 + (2 * cn[i] / a)^theta)
+      cn[i+1] <- r0 * cn[i] / (1 + (2 * cn[i] / a)^theta)
+      
+    }
+    
+    cn_unique <- unique(cn[201:400])
+    if (r0 == 1) {
+      d <- data.frame(
+        r0 = rep(r0, length(cn_unique)),
+        cn = cn_unique
+      )
+
+    } else {
+      d <- rbind(d, data.frame(
+          r0 = rep(r0, length(cn_unique)),
+          cn = cn_unique
+        ))
+    }
+    
+  }
+  
+  plot(0, 0, type = "n", xlim = c(0, 20), ylim = c(0, 10), 
+       xlab = expression("R"[0]), 
+       ylab = expression("2C/a")
+       )
+  points(d$r0, 2 * d$cn/a, pch = 20, cex = 0.05)
+}
+bev_holt3(0.5)
+bev_holt3(1.5)
+bev_holt3(3.0)
+bev_holt3(4.0)
+bev_holt3(5.0)
+```
+
+```{r}
+i_end <- 400
+cn <- rep(0, i_end)
+theta <- 3.0
+r0_list <- seq(1, 20, by = 0.05)
+
+a <- 100
+cn[1] <- 5
+
+for (j in seq_along(r0_list)) {
+  
+  r0 <- r0_list[j]
+  for (i in 1:(i_end-1)) {
+    
+    # cn[i+1] <- sigma * m0 / 2 * cn[i] / (1 + (2 * cn[i] / a)^theta)
+    cn[i+1] <- r0 * cn[i] / (1 + (2 * cn[i] / a)^theta)
+    
+  }
+  
+  if (r0 == 1) {
+    d <- data.frame(
+      r0 = rep(r0, 200),
+      cn = cn[201:400]
+    )
+    
+  } else {
+    d <- rbind(d, data.frame(
+      r0 = rep(r0, 200),
+      cn = cn[201:400]
+    ))
+  }
+  
+}
+
+subset(d, r0 == 4.0)
+```
+
+### リッカーモデル
+
+$$ 
+c_{n+1} = R_0 c_n e^{-2r c_n}
+$$ 
+
+```{r}
+i_end <- 400
+cn <- rep(0, i_end)
+# theta <- 1.0
+r0_list <- seq(0, 30, by = 0.05)
+gamma_val <- 10  
+cn[1] <- 5
+
+d <- data.frame()
+for (j in seq_along(r0_list)) {
+  
+  r0 <- r0_list[j]
+  for (i in 1:(i_end-1)) {
+    
+    cn[i+1] <- r0 * cn[i] * exp(-2 * gamma_val * cn[i])
+    
+  }
+  
+  cn_unique <- unique(cn[201:400])
+  if (j == 0) {
+    d <- data.frame(
+      r0 = rep(r0, length(cn_unique)),
+      cn = cn_unique
+    )
+    
+  } else {
+    d <- rbind(d, data.frame(
+      r0 = rep(r0, length(cn_unique)),
+      cn = cn_unique
+    ))
+  }
+  
+}
+
+plot(0, 0, type = "n", xlim = c(0, 30), ylim = c(0, 10), 
+     xlab = expression("R"[0]), 
+     ylab = expression("2C gamma")
+)
+points(d$r0, 2 * d$cn * gamma_val, pch = 20, cex = 0.05)
+```
+
+### ロジスティック写像
+
+$$
+c_{n+1} = R_0 (1 - \frac{c_n}{c_c}) c_n
+$$
+
+```{r}
+i_end <- 400
+cn <- rep(0, i_end)
+# theta <- 1.0
+r0_list <- seq(0, 4, by = 0.01)
+a_c <- 100
+c_c <- a_c / 2
+cn[1] <- 5
+
+d <- data.frame()
+for (j in seq_along(r0_list)) {
+  
+  r0 <- r0_list[j]
+
+  for (i in 1:(i_end-1)) {
+    
+    if (cn[i] < c_c) {
+      
+      cn[i+1] <- r0 * (1 - cn[i] / c_c) * cn[i]
+      
+    } else if (cn[i] >= c_c) {
+      
+      cn[i+1] <- 0
+    }
+    
+    
+  }
+  
+  cn_unique <- unique(cn[201:400])
+  if (j == 0) {
+    d <- data.frame(
+      r0 = rep(r0, length(cn_unique)),
+      cn = cn_unique
+    )
+    
+  } else {
+    d <- rbind(d, data.frame(
+      r0 = rep(r0, length(cn_unique)),
+      cn = cn_unique
+    ))
+  }
+  
+}
+
+plot(0, 0, type = "n", xlim = c(0, 5), ylim = c(0, 2), 
+     xlab = expression("R"[0]), 
+     ylab = expression("2C gamma")
+)
+points(d$r0, 2 * d$cn / c_c, pch = 20, cex = 0.05)
+
+plot(0, 0, type = "n", xlim = c(3.0, 4.0), ylim = c(0, 2), 
+     xlab = expression("R"[0]), 
+     ylab = expression("2C gamma")
+)
+points(d$r0, 2 * d$cn / c_c, pch = 20, cex = 0.01)
+```
+
+## .2 正の密度効果
+
+### アリー効果
+アリー効果：ある範囲における個体数密度上昇効果のこと。個体数密度が下がるにつれて
+```{r}
+
+a <- seq(0, 50, by = 0.01)
+a0 <- 10
+m0 <- 12
+
+plot(a, m0 * (a / a0) * exp(1 - a / a0), type = "l")
+abline(v = a0, lty = "dotted")
+text(x = 11, y = 0.25, label = "a0")
+```
+```{r}
+
+
+allee_model <- function(.r, .coef) {
+  i_end <- 20
+  cn <- rep(0, i_end+1)
+  a0 <- 100
+  c0 <- a0 / 2
+  
+  cn[1] <- c0 * .coef
+  
+  for (i in 1:i_end) {
+    cn[i + 1] <- c0 * .r * (cn[i] / c0)^2 * exp(1 - cn[i] / c0)
+  }
+  
+  return(cn / c0)
+}
+
+plot(allee_model(2, 0.30), type = "b", ylim = c(0, 3))
+lines(allee_model(2, 0.20), type = "b", col = "red")
+
+plot(allee_model(2, 0.70), type = "b", ylim = c(0, 8))
+lines(allee_model(2, 0.71), type = "b", col = "red")
+
+plot(allee_model(2.0, 0.30), type = "b", ylim = c(0, 5))
+plot(allee_model(3.0, 0.30), type = "b", ylim = c(0, 5))
+plot(allee_model(4.5, 0.30), type = "b", ylim = c(0, 8))
+plot(allee_model(5.0, 0.30), type = "b", ylim = c(0, 8))
+plot(allee_model(7.3, 0.30), type = "b", ylim = c(0, 12))
+
+```
+- 分岐図(bifurcation diagram) / 軌道図(orbit diagram)
+```{r}
+allee_model <- function(.r, .coef) {
+  i_end <- 400
+  cn <- rep(0, i_end+1)
+  a0 <- 100
+  c0 <- a0 / 2
+  
+  cn[1] <- c0 * .coef
+  
+  for (i in 1:i_end) {
+    cn[i + 1] <- c0 * .r * (cn[i] / c0)^2 * exp(1 - cn[i] / c0)
+  }
+  
+  return(cn / c0)
+}
+
+
+r0_list <- seq(0, 8, by = 0.05)
+d <- data.frame()
+for (j in seq_along(r0_list)) {
+  
+  r0 <- r0_list[j]
+
+  cn_c0 <- allee_model(r0, 0.30)
+  
+  cn_unique <- unique(cn_c0[201:400])
+  if (j == 0) {
+    d <- data.frame(
+      r0 = rep(r0, length(cn_unique)),
+      cn = cn_unique
+    )
+    
+  } else {
+    d <- rbind(d, data.frame(
+      r0 = rep(r0, length(cn_unique)),
+      cn = cn_unique
+    ))
+  }
+  
+}
+
+plot(0, 0, type = "n", xlim = c(0, 8.0), ylim = c(0, 10), 
+     xlab = expression("R"[0]), 
+     ylab = expression("c/c0")
+)
+points(d$r0, d$cn, pch = 20, cex = 0.01)
+```
+### 絶滅のシナリオ
+```{r, fig.width=12, fig.height=4}
+allee_model_fig217 <- function(.r, .coef, interv = FALSE, interv_rate = 0) {
+  i_end <- 40
+  cn <- rep(0, i_end+1)
+  a0 <- 100
+  c0 <- a0 / 2
+  
+  cn[1] <- c0 * .coef
+  
+  for (i in 1:i_end) {
+    cn[i + 1] <- c0 * .r * (cn[i] / c0)^2 * exp(1 - cn[i] / c0)
+    if (interv) {
+      if (i == 10) {
+        cn[i + 1] <- cn[i + 1] * interv_rate
+      }
+    }
+    
+  }
+  
+  return(cn / c0)
+}
+
+allee_model_fig217_tmp <- function(.r, .coef, interv_rate = 0) {
+  i_end <- 40
+  cn <- rep(0, i_end+1)
+  a0 <- 100
+  c0 <- a0 / 2
+  
+  cn[1] <- c0 * .coef
+  
+  for (i in 1:i_end) {
+    cn[i + 1] <- c0 * .r * (cn[i] / c0)^2 * exp(1 - cn[i] / c0)
+    if (i == 10) {
+      cn[i + 1] <- cn[i + 1] * interv_rate
+    }
+  }
+  
+  return(cn / c0)
+}
+
+par(mfrow = c(1, 3))
+plot(allee_model_fig217(1.2, 0.6), type = "b")
+plot(allee_model_fig217(1.2, 0.6, interv = TRUE, interv_rate = 0.3), type = "b")
+plot(allee_model_fig217(1.2, 0.6, interv = TRUE, interv_rate = 0.25), type = "b")
+
+par(mfrow = c(1, 3))
+plot(allee_model_fig217(1.2, 0.5), type = "b")
+plot(allee_model_fig217(1.2, 0.5, interv = TRUE, interv_rate = 4), type = "b")
+plot(allee_model_fig217(1.2, 0.5, interv = TRUE, interv_rate = 6), type = "b")
+
+par(mfrow = c(1, 3))
+plot(allee_model_fig217(1.2, 0.5), type = "b")
+plot(c(1:10, 10, 11:40), allee_model_fig217_tmp(1.2, 0.5, interv_rate = 4), type = "b")
+plot(c(1:10, 10, 11:40), allee_model_fig217_tmp(1.2, 0.5, interv_rate = 6), type = "b")
+```
+
+### 弱いアリー効果
+$$
+\begin{align}
+m(a_n) &= m_0 + (m_o - m_0) (\frac{a_n}{a_o}) &(0 \lt a_n \le a_o)\\
+       &= - \frac{m_o}{a_c - a_o} (a_n - a_c) &(a_o \lt a_n \lt a_c)\\
+       &= 0 &(a_n \ge a_c)
+\end{align}
+$$
+
+```{r}
+a <- seq(0, 50, by = 0.01)
+a0 <- 10
+m0 <- 12
+
+plot(a, m0 * (a / a0) * exp(1 - a / a0), type = "l")
+abline(v = a0, lty = "dotted")
+text(x = 11, y = 0.25, label = "a0")
+
+week_allee <- function(.a) {
+  
+  mo <- 10
+  m0 <- 5
+  m <- rep(0, length(a))
+  
+  ac <- 20
+  ao <- 10
+  for (i in seq_along(.a)) {
+    
+    an <- .a[i]
+    if (an > 0 & an <= ao) {
+      m[i] <- m0 + (mo - m0) * (an / ao)
+    } else if (ao < an & an < ac) {
+      m[i] <- - (mo)/(ac - ao) * (an - ac)
+    } else if (an >= ac) {
+      m[i] <- 0
+    }
+    
+  }
+  
+  return(m)
+}
+
+plot(a, week_allee(a), type = "l")
+```
+
+
+## .3 競争の影響
+レスリーガワーモデル  
+
+$$
+\begin{align}
+m_1(a_n, b_n) &= \frac{m_{10}}{1 + \beta_{11} a_n + \beta_{12} b_n} \\
+m_2(a_n, b_n) &= \frac{m_{20}}{1 + \beta_{21} a_n + \beta_{22} b_n}
+\end{align}
+$$
+
+$$
+\begin{align}
+a_{n+1} &= \frac{R_{01} a_n }{1+\beta_{11}a_n+\beta_{12}b_n} \\
+b_{n+1} &= \frac{R_{02} b_n}{1+\beta_{21} a_n + \beta_{22} b_n}
+\end{align}
+$$
+
+
+```{r}
+
+i_end <- 40
+an <- rep(0, i_end + 1)
+bn <- rep(0, i_end + 1)
+an[1] <- 4
+bn[1] <- 0.5
+
+beta11 <- 1
+beta22 <- 2
+R01 <- 3
+R02 <- 2
+
+beta12 <- 5
+beta21 <- 0.2
+
+for (i in 1:i_end) {
+  
+  an[i+1] <- (R01 * an[i]) / (1 + beta11 * an[i] + beta12 * bn[i])
+  bn[i+1] <- (R02 * bn[i]) / (1 + beta21 * an[i] + beta22 * bn[i])
+  
+}
+
+leslie_gower <- function(a1, b1, beta12, beta21) {
+  i_end <- 40
+  an <- rep(0, i_end + 1)
+  bn <- rep(0, i_end + 1)
+  an[1] <- a1
+  bn[1] <- b1
+  
+  beta11 <- 1
+  beta22 <- 2
+  R01 <- 3
+  R02 <- 2
+  
+  for (i in 1:i_end) {
+    
+    an[i+1] <- (R01 * an[i]) / (1 + beta11 * an[i] + beta12 * bn[i])
+    bn[i+1] <- (R02 * bn[i]) / (1 + beta21 * an[i] + beta22 * bn[i])
+    
+  }
+  
+  return(data.frame(
+    a = an,
+    b = bn
+  ))
+}
+
+plot_lg <- function(beta12, beta21) {
+  a1 <- c(3.8, 1, 0.5, 0.2)
+  b1 <- c(0.9, 0.3, 0.1)
+  
+  plot(0, 0, xlim = c(0, 4), ylim = c(0, 1), xlab = expression("a[n]"), ylab = expression("b[n]"))
+  for (i_a in seq_along(a1)) {
+    for (i_b in seq_along(b1)) {
+      aa <- a1[i_a]
+      bb <- b1[i_b]
+      
+      d <- leslie_gower(a1 = aa, b1 = bb, beta12 = beta12, beta21 = beta21)
+      lines(d$a, d$b, type = "b", col = "gray80")
+      
+    } 
+  }
+}
+
+plot_lg(beta12 = 5, beta21 = 0.2)
+plot_lg(beta12 = 2, beta21 = 0.6)
+plot_lg(beta12 = 2, beta21 = 0.2)
+plot_lg(beta12 = 10, beta21 = 2.0)
+```
+
+### リッカー型2種競争系モデル
+
+```{r}
+
+ricker2_model <- function(R02, r12) {
+  
+  i_end <- 400
+  an <- rep(0, i_end + 1)
+  bn <- rep(0, i_end + 1)
+  
+  R01 <- 6.05
+  r11 <- 0.2
+  r21 <- 0.1
+  r22 <- 0.2
+  
+  an[1] <- 3
+  bn[1] <- 1
+  
+  
+  
+  for (i in 1:i_end) {
+    an[i+1] <- R01 * an[i] * exp(-r11 * an[i] - r12 * bn[i])
+    bn[i+1] <- R02 * bn[i] * exp(-r21 * an[i] - r22 * bn[i])
+  }
+  
+  return(list(
+    an = an,
+    bn = bn
+  ))
+}
+
+
+R02_list <- seq(0, 20, by = 0.1)
+
+d_an <- data.frame()
+d_bn <- data.frame()
+for (j in seq_along(R02_list)) {
+  
+  R02 <- R02_list[j]
+
+  cal <- ricker2_model(R02, 0.1)
+  
+  an_unique <- unique(cal$an[301:400])
+  bn_unique <- unique(cal$bn[301:400])
+  
+  if (j == 0) {
+    d_an <- data.frame(
+      R02 = rep(R02, length(an_unique)),
+      an = an_unique
+    )
+    d_bn <- data.frame(
+      R02 = rep(R02, length(bn_unique)),
+      bn = bn_unique
+    )
+    
+  } else {
+    d_an <- rbind(d_an, data.frame(
+      R02 = rep(R02, length(an_unique)),
+      an = an_unique
+    ))
+    d_bn <- rbind(d_bn, data.frame(
+      R02 = rep(R02, length(bn_unique)),
+      bn = bn_unique
+    ))
+  }
+  
+}
+
+plot(0, 0, type = "n", xlim = c(0, 20), ylim = c(0, 10), 
+     xlab = expression("R"[02]), 
+     ylab = expression("an")
+)
+points(d_an$R02, d_an$an, pch = 20, cex = 0.01)
+
+plot(0, 0, type = "n", xlim = c(0, 20), ylim = c(0, 30), 
+     xlab = expression("R"[02]), 
+     ylab = expression("bn")
+)
+points(d_bn$R02, d_bn$bn, pch = 20, cex = 0.01)
+```
+
+```{r}
+r12_list <- seq(0, 0.20, by = 0.001)
+
+d_an <- data.frame()
+d_bn <- data.frame()
+for (j in seq_along(r12_list)) {
+  
+  r12 <- r12_list[j]
+
+  cal <- ricker2_model(18.17, r12)
+  
+  an_unique <- unique(cal$an[301:400])
+  bn_unique <- unique(cal$bn[301:400])
+  
+  if (j == 0) {
+    d_an <- data.frame(
+      r12 = rep(r12, length(an_unique)),
+      an = an_unique
+    )
+    d_bn <- data.frame(
+      r12 = rep(r12, length(bn_unique)),
+      bn = bn_unique
+    )
+    
+  } else {
+    d_an <- rbind(d_an, data.frame(
+      r12 = rep(r12, length(an_unique)),
+      an = an_unique
+    ))
+    d_bn <- rbind(d_bn, data.frame(
+      r12 = rep(r12, length(bn_unique)),
+      bn = bn_unique
+    ))
+  }
+  
+}
+
+plot(0, 0, type = "n", xlim = c(0, 0.20), ylim = c(0, 15), 
+     xlab = expression("r"[12]), 
+     ylab = expression("an")
+)
+points(d_an$r12, d_an$an, pch = 20, cex = 0.01)
+
+plot(0, 0, type = "n", xlim = c(0, 0.20), ylim = c(0, 35), 
+     xlab = expression("r"[12]), 
+     ylab = expression("bn")
+)
+points(d_bn$r12, d_bn$bn, pch = 20, cex = 0.01)
+```
+
+```{r}
+ricker2_model <- function(R01, R02, r11, r12, r21, r22, a1, b1) {
+  
+  i_end <- 100
+  an <- rep(0, i_end + 1)
+  bn <- rep(0, i_end + 1)
+  
+  # R01 <- 6.05
+  # r11 <- 0.2
+  # r21 <- 0.1
+  # r22 <- 0.2
+  
+  an[1] <- a1
+  bn[1] <- b1
+  
+  for (i in 1:i_end) {
+    an[i+1] <- R01 * an[i] * exp(-r11 * an[i] - r12 * bn[i])
+    bn[i+1] <- R02 * bn[i] * exp(-r21 * an[i] - r22 * bn[i])
+  }
+  
+  return(list(
+    an = an,
+    bn = bn
+  ))
+}
+
+cal_res <- ricker2_model(R01 = 11.02, R02 = 14.88, r11 = 0.3, r12 = 0.1, r21 = 0.1, r22 = 0.2, a1 = 7.992, b1 = 0.0)
+plot(cal_res$an, type = "l")
+
+cal_res <- ricker2_model(R01 = 11.02, R02 = 14.88, r11 = 0.3, r12 = 0.1, r21 = 0.1, r22 = 0.2, a1 = 0, b1 = 0.0135)
+plot(cal_res$bn, type = "l")
+
+cal_res <- ricker2_model(R01 = 11.02, R02 = 14.88, r11 = 0.3, r12 = 0.1, r21 = 0.1, r22 = 0.2, a1 = 7.992, b1 = 0.00135)
+plot(cal_res$an, type = "l")
+plot(cal_res$bn, type = "l")
+```
+```{r}
+cal_res <- ricker2_model(R01 = 6.05, R02 = 14.88, r11 = 0.1, r12 = 0.2, r21 = 0.2, r22 = 0.1, a1 = 27, b1 = 8.1)
+plot(cal_res$an, type = "l", ylim = c(0, 30))
+points(cal_res$an, pch = 20, cex = 0.5)
+lines(cal_res$bn, type = "l", col = "red")
+points(cal_res$bn, pch = 20, cex = 0.5, col = "red")
+
+cal_res <- ricker2_model(R01 = 6.05, R02 = 14.88, r11 = 0.1, r12 = 0.2, r21 = 0.2, r22 = 0.1, a1 = 27, b1 = 8.37)
+plot(cal_res$an, type = "l", ylim = c(0, 60))
+points(cal_res$an, pch = 20, cex = 0.5)
+lines(cal_res$bn, type = "l", col = "red")
+points(cal_res$bn, pch = 20, cex = 0.5, col = "red")
+```
+
+## .4 天敵の影響
+
+$$
+c_{n+1} = \frac{\sigma(p_n) m c_n}{2}
+$$
+
+```{r}
+nicholson_bailey <- function(R0, a1, p1, q_lambda, mu, rho) {
+  
+  i_end <- 200
+  an <- rep(0, i_end + 1)
+  pn <- rep(0, i_end + 1)
+  
+  
+  an[1] <- a1
+  pn[1] <- p1
+  
+  for (i in 1:i_end) {
+    
+    an[i+1] <- R0 * exp(-q_lambda * pn[i]) * an[i]
+    pn[i+1] <- (1 - mu) * pn[i] + rho * R0 * (1 - exp(-q_lambda * pn[i])) * an[i]
+    
+  }
+  
+  return(list(
+    an = an,
+    pn = pn
+  ))
+}
+
+res_nb <- nicholson_bailey(R0 = 1.3, a1 = 2.0, p1 = 1.0, q_lambda = 0.2, mu = 0.3, rho = 0.9)
+
+plot(res_nb$an, type = "l")
+lines(res_nb$pn, type = "l", col = "red")
+```
+
+```{r}
+nicholson_bailey_with_bholt <- function(R0, a1, p1, q_lambda, mu, rho, alpha_val) {
+  
+  i_end <- 1000
+  an <- rep(0, i_end + 1)
+  pn <- rep(0, i_end + 1)
+  
+  
+  an[1] <- a1
+  pn[1] <- p1
+  
+  for (i in 1:i_end) {
+    
+    m_an <- an[i] / (1 + an[i] / alpha_val)
+    an[i+1] <- R0 * exp(-q_lambda * pn[i]) * m_an
+    pn[i+1] <- (1 - mu) * pn[i] + rho * R0 * (1 - exp(-q_lambda * pn[i])) * m_an
+    
+  }
+  
+  return(list(
+    an = an,
+    pn = pn
+  ))
+}
+
+res_nbbh <- nicholson_bailey_with_bholt(R0 = 7.5, a1 = 2.0, p1 = 1.0, q_lambda = 0.5, mu = 0.3, rho = 0.9, alpha_val = 1)
+plot(res_nbbh$an, type = "l")
+plot(res_nbbh$pn, type = "l", col = "red")
+plot(res_nbbh$an, res_nbbh$pn, type = "l", col = "red")
+plot(res_nbbh$an[500:1000], res_nbbh$pn[500:1000], type = "l", col = "red")
+```
+
+## .5 削減/間引きの影響
+- hが間引き、削減による減少率 = 収穫率とすると、a * h=収穫量
+
+```{r}
+
+bh_mabiki <- function(h) {
+  
+  i_end <- 100
+  R0 <- 10.0
+  alpha_val <- 0.5
+  an <- rep(0, i_end+1)
+  an[1] <- 10
+  for (i in 1:i_end) {
+    an[i + 1] <- R0 * (1 - h) * an[i] / (1 + (1 - h) * an[i] / alpha_val)
+  }
+  return(an)
+  
+}
+
+h <- seq(0, 1, by = 0.01)
+h_length <- length(h)
+a_star <- rep(0, h_length)
+
+for (i in seq_along(h)) {
+  
+  tmp <- bh_mabiki(h[i])
+  a_star[i] <- tail(tmp, 1)
+  
+}
+
+R0 <- 10
+plot(h, a_star, type = "l")
+plot(h, h * a_star, type = "l")
+abline(v = (1 - 1/sqrt(R0)))
+```
+```{r}
+# h <- seq(0, 1, by = 0.05)
+# h_length <- length(h)
+
+R0 <- 10
+alpha_val <- 2.0
+eta <- 10
+p <- 3.5
+# 
+# ph <- p * h * (R0 - 1/(1 - h) * alpha_val - eta * h)
+ph <- p * (h * a_star) - eta * h
+h_mey <- 1 - 1 / sqrt(R0 - eta / (p * alpha_val))
+plot(h, h * a_star)
+plot(h, ph, type = "l", ylim = c(-10, 3), xlim = c(0, 1.0))
+abline(h = 0, lty = "dashed")
+abline(v = h_mey, lty = "dashed")
+```
+- リッカー型モデル
+
+```{r}
+ricker_model236 <- function(h) {
+  
+  i_end <- 400
+  an <- rep(0, i_end + 1)
+
+  R0 <- 20
+  gamma_val <- 1
+  
+  an[1] <- 7
+
+  for (i in 1:i_end) {
+    an[i+1] <- R0 * (1 - h) * an[i]  * exp(-gamma_val * (1-h) * an[i])
+  }
+  
+  return(an)
+  
+}
+
+h <- seq(0, 1, by = 0.001)
+h_length <- length(h)
+
+d_an <- data.frame()
+for (j in seq_along(h)) {
+  
+  h_val <- h[j]
+
+  cal <- ricker_model236(h_val)
+  
+  an_unique <- unique(cal[301:400])
+
+  if (j == 0) {
+    d_an <- data.frame(
+      h = rep(h_val, length(an_unique)),
+      an = an_unique
+    )
+
+  } else {
+    d_an <- rbind(d_an, data.frame(
+      h = rep(h_val, length(an_unique)),
+      an = an_unique
+    ))
+
+  }
+  
+}
+
+plot(0, 0, type = "n", xlim = c(0, 1), ylim = c(0, 8), 
+     xlab = expression("h"), 
+     ylab = expression("a"[infinity])
+)
+points(d_an$h, d_an$an, pch = 20, cex = 0.01)
+
+Y <- d_an$an * d_an$h
+plot(0, 0, type = "n", xlim = c(0, 1), ylim = c(0, 7), 
+     xlab = expression("h"), 
+     ylab = expression("Y"[infinity])
+)
+points(d_an$h, Y, pch = 20, cex = 0.01)
+
+eta <- 6.5
+p <- 1.0
+Ph <- p * Y - eta * d_an$h
+
+plot(0, 0, type = "n", xlim = c(0, 1), ylim = c(-7, 3), 
+     xlab = expression("h"), 
+     ylab = expression("P"[infinity])
+)
+points(d_an$h, Ph, pch = 20, cex = 0.01)
+abline(h = 0, lty = "dashed")
+
+plot(ricker_model236(0.1)[1:30], type = "l")
+plot(ricker_model236(0.2)[1:30], type = "l")
+plot(ricker_model236(0.5)[1:30], type = "l")
+plot(ricker_model236(0.8)[1:30], type = "l")
+```
+

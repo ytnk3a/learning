@@ -1,0 +1,198 @@
+---
+title: "Ch.22 生存分析"
+output: html_document
+date: "2024-01-06"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(survival)
+library(MASS)
+data(gehan)
+dim(gehan)
+```
+
+# 基本概念
+```{r}
+gehan[1:6, ]
+```
+
+```{r}
+Surv(gehan$time, gehan$cens)
+```
++: 打ち切りデータ
+
+## 生存分析の分類
+- ノンパラメトリックモデル: `survfit()`
+- セミノンパラメトリックモデル: `coxph()`
+- パラメトリックモデル: `survreg()`
+
+# ノンパラメトリックモデル
+```{r}
+ge_surv <- survfit(Surv(time, cens) ~ treat, data = gehan)
+ge_surv
+```
+データ `gehan`における
+投与群と対照群ごとの標本数、イベントの件数、中央値、区間推定がかえってくる
+
+
+`survfit()`には、3種類の推定方法がある
+- カプラン-マイヤー推定法 (<- デフォルト)
+- フレミング-ハリントン推定法
+- fh2推定法
+
+
+```{r}
+summary(ge_surv)
+plot(ge_surv, lty = 1:2)
+legend(25, 0.95, c("6-MP投与群", "対照群"))
+```
+```{r}
+ge2 <- subset(gehan, treat == "6-MP")
+ge2_surv <- survfit(Surv(time, cens) ~ treat, conf.int = .9, data = ge2, conf.type = "plain")
+
+plot(ge2_surv, mark.t = FALSE)
+legend(25, 0.95, lty = c(1, 2), legend = c("生存曲線", "90%信頼区間"))
+```
+
+`survfit()`関数の信頼区間を指定する引数 `conf.type`は下記
+- "none"
+- "plain"
+  $ \hat{S} \pm z_{1-\alpha/2^{se(\hat{S})}} $
+- "log" (<- デフォルト)
+  $ exp(\log \hat{S} \pm z_{1 - \alpha/2^{se(\hat{H})}} ) $
+- "log-log"
+  $ \exp[ -\exp(\log \hat{H} \pm z_{1 - \alpha/2^{se(\hat{H})}})] $
+
+
+```{r}
+plot(ge2_surv, conf.int = TRUE, mark.t = FALSE)
+lines(
+  survfit(Surv(time, cens) ~ treat, data = ge2, conf.type = "plain"), 
+  mark.time = FALSE, conf.int = TRUE, lty = 3, col = 3
+  )
+lines(
+  survfit(Surv(time, cens) ~ treat, data = ge2, conf.type = "log-log"), 
+  mark.time = FALSE, conf.int = TRUE, lty = 4, col = 4
+  )
+legend(5, 0.3, c("log", "plain", "log-log"), lty = c(1, 3, 4), col = c(1, 3, 4))
+
+```
+
+```{r}
+ge2_s   <- survfit(Surv(time, cens) ~ treat, data = gehan)
+ge2_fh  <- survfit(Surv(time, cens) ~ treat, data = gehan, type = "fleming-harrington")
+ge2_fh2 <- survfit(Surv(time, cens) ~ treat, data = gehan, type = "fh2")
+
+plot(ge2_s, conf.int = FALSE, mark.time = FALSE)
+lines(ge2_fh,  lty = 2)
+lines(ge2_fh2, lty = 3, col = 2)
+legend(5, 0.3, lty = 1:3, legend = c("Kaplan-Meier", "Fleming-Harrington", "fh2"))
+```
+## 生存関数の検定
+
+```{r}
+survdiff(Surv(time) ~ treat, data = gehan)
+```
+
+ 
+2群以上の観測値が得られた際は群ごとの生存曲線の間の差の有意性に関して検定を必要とする場合がある
+`survdiff()`関数で検定を行うことができ、G-rhoファミリの検定を行う
+rho = 0 の時 log-rank検定（ログランク検定）、
+rho = 1の時、ゲーハン-ウィルコクソン検定(Gehan-Wilcoxon)を行う
+
+# セミノンパラメトリックモデル
+## コックス比例ハザードモデル
+
+パラメーターの推定方法としては
+- 直接法
+- ブレスローンの近似法
+- エフロンの近似法
+の3点がある
+
+直接法はイベントが増えると、部分尤度の分母の項が煩雑になる
+近似法は同時に起こるイベントの数が多くなると、推定される $\beta$が0に偏り、
+妥当性がなくなる
+
+```{r}
+data(kidney)
+
+kidney_cox <- coxph(Surv(time, status) ~ sex + disease, data = kidney)
+summary(kidney_cox)
+```
+
+```{r}
+kidney_fit <- survfit(kidney_cox)
+summary(kidney_fit)
+plot(kidney_fit)
+```
+
+## 残差分析
+- マルチンゲール残差
+- シェーンフィールド残差
+- スコア残差
+- デヴィアンス残差
+
+```{r}
+scatter.smooth(residuals(kidney_cox))
+abline(h = 0, lty = 3, col = 2)
+
+```
+```{r}
+scatter.smooth(residuals(kidney_cox, type = "deviance"))
+abline(h = 0, lty = 3, col = 2)
+```
+```{r}
+scatter.smooth(residuals(kidney_cox, type = "schoenfeld"))
+abline(h = 0, lty = 3, col = 2)
+```
+
+```{r}
+scatter.smooth(residuals(kidney_cox, type = "score"))
+abline(h = 0, lty = 3, col = 2)
+```
+
+## ハザードの比例性の分析
+コックス比例ハザードモデルは、ハザード比が時間によらず、一定であることが前提である
+比例性を分析する関数 `cox.zph` がある
+
+```{r}
+kidney_zph <- cox.zph(kidney_cox)
+kidney_zph
+
+plot(kidney_zph)
+
+op <- par(mfrow = c(1, 2), mar = c(4.5, 4, 1, 1))
+plot(kidney_zph, df = 2)
+par(op)
+```
+
+## 交互作用
+```{r}
+kidney_cox2 <- coxph(Surv(time, status) ~ (sex + age + disease)^2, data = kidney)
+kidney_cox2
+
+stepAIC(kidney_cox2)
+```
+
+# パラメトリックモデル
+```{r}
+survreg(Surv(time, status) ~ sex + disease, kidney, dist = "lognormal")
+```
+
+```{r}
+survreg(Surv(time, status) ~ sex + disease, kidney, dist = "weibull")
+```
+
+```{r}
+survreg(Surv(time, status) ~ sex + disease, kidney, dist = "logistic")
+```
+
+# 
+- survMisc
+- bujar
+- survivalROC
+- randomForestSRC
+- ggRandomForests
+- survBayes
+- surnnet

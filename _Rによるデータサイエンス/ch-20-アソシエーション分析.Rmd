@@ -1,0 +1,280 @@
+---
+title: "Ch.20 アソシエーション分析"
+output: html_document
+date: "2024-01-04"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(arules)
+library(arulesViz)
+
+data("Adult")
+mat_adult <- as(Adult, "matrix")
+```
+
+```{r}
+head(mat_adult[, 1:6])
+```
+
+`itemFrequencyPlot()`トランザクションデータのアイテムの頻度の棒グラフを作成することができる
+引数 `type`で絶対度数(absolute)か相対度数(relative)を指定することができる
+また、アイテム数が多い場合は、引数 `support` で度数の低いアイテムを削除することも可能
+
+```{r, fig.width=12}
+# itemFrequency(Adult)
+itemFrequencyPlot(Adult, type = "absolute")
+itemFrequencyPlot(Adult, type = "relative", support = 0.1, horiz = TRUE)
+```
+
+```{r}
+d_ap <- apriori(Adult)
+```
+
+```{r}
+inspect(head(sort(d_ap, by = "support")), n = 10)
+inspect(sort(d_ap, by = "support")[1:10])
+```
+
+引数`parameter`を設定することで、ルールの数をコントロールすることができる
+maxlenでアイテム数を設定することができる
+
+```{r}
+d_ap_rule <- apriori(Adult, parameter = list(supp = 0.1, maxlen = 3))
+
+inspect(head(sort(d_ap_rule, by = "support"), n = 20))
+```
+
+```{r, fig.width=12}
+data("Income")
+itemFrequencyPlot(Income)
+```
+
+```{r}
+
+income_ap <- apriori(Income)
+```
+
+```{r}
+summary(income_ap)
+```
+```{r}
+inspect(sort(income_ap, by = "support")[1:10])
+```
+
+```{r}
+income_ap2 <- subset(income_ap, subset = rhs %in% "income=$40,000+" & lift > 2)
+inspect(income_ap2)
+
+```
+
+```{r}
+income_ap3 <- subset(income_ap, subset = lhs %pin% "education" & rhs %pin% "income")
+inspect(sort(income_ap3, by = "lift")[1:5])
+```
+
+
+アイテム数が多く、分散が大きい時はデフォルトの高いサポート値では、
+ルールが抽出されないときがあるので、
+パラメーターでsupport値を下がることが必要である
+
+```{r}
+data("Groceries")
+
+gr_ap <- apriori(Groceries, parameter = list(support = 0.005, confidence = 0.01))
+
+beef_rules <- subset(gr_ap, subset = rhs %in% "beef")
+
+inspect(head(sort(beef_rules, by = "confidence"), n = 3))
+```
+
+
+
+
+```{r}
+plot(income_ap2, method = "scatterplot")
+plot(income_ap2, method = "scatterplot", engine = "ggplot2")
+plot(income_ap2, measure = c("support", "lift"), shading = "confidence", limit = 100)
+
+```
+```{r}
+plot(
+  income_ap2,  
+  method = "graph", 
+  control = list(
+    type = "items",
+    # layout = layout.fruchterman.reingold,
+    cex = 2),
+  margin = -0.1
+  )
+plot(
+  income_ap2,
+  method = "graph",
+  control = list(
+    # type = "items",
+    engine = "graphviz",
+    # layout = layout.fruchterman.reingold,
+    cex = 2),
+  margin = -0.1
+  )
+```
+```{r}
+plot(income_ap2, method = "graph", layout = 'linear', circular = TRUE, limit = 10)
+```
+
+```{r}
+plot(income_ap2, method = "graph", asEdges = TRUE, limit = 10)
+plot(income_ap2, method = "graph", asEdges = TRUE, circular = FALSE, limit = 10)
+```
+```{r}
+plot(income_ap2, method = "graph", engine = "igraph",
+  plot_options = list(
+    edge.lty = 2, 
+    vertex.label.cex = .6, 
+    margin = c(.1,.1,.1,.1), 
+    asp = .5),
+  limit = 10)
+
+# igraph layout generators can be used (see ? igraph::layout_)
+plot(income_ap2, method="graph", engine = "igraph", layout = igraph::in_circle(), limit = 10)
+
+## Not run: 
+# Graph rendering using engine graphviz
+plot(income_ap2, method = "graph", engine = "graphviz", limit = 10)
+
+```
+
+```{r}
+library(ggplot2)
+plot(income_ap2, method = "graph", 
+  control = list(
+    edges = ggraph::geom_edge_link(
+      end_cap = ggraph::circle(4, "mm"),
+      start_cap = ggraph::circle(4, "mm"),
+      color = "black",
+      arrow = arrow(length = unit(2, "mm"), angle = 20, type = "closed"),
+      alpha = .2
+    ),
+    nodes = ggraph::geom_node_point(aes_string(size = "support", color = "lift")),
+    nodetext = ggraph::geom_node_label(aes_string(label = "label"), alpha = .8, repel = TRUE)
+  ),
+  limit = 10
+  ) + 
+  scale_color_gradient(low = "yellow", high = "red") + 
+  scale_size(range = c(2, 10))
+```
+
+```{r}
+plot(income_ap2, method = "two-key plot")
+```
+```{r}
+plot(income_ap2, method = "grouped matrix")
+```
+
+```{r}
+rules <- apriori(Groceries, parameter=list(support = 0.001, confidence = 0.8))
+rules
+
+subrules <- subset(rules, lift > 5)
+subrules
+
+# 2D matrix with shading (ggplot2). The LHS and RHS are reordered so 
+# that rules with similar lift are displayed close to each other.
+plot(subrules, method = "matrix")
+
+```
+
+```{r}
+plot(rules, method="grouped matrix", k = 5)
+```
+
+```{r}
+plot(income_ap2, method = "matrix", measure="lift")
+```
+
+```{r}
+plot(income_ap2, method = "paracoord")
+```
+```{r}
+oneRule <- sample(income_ap2, 1)
+# plot(oneRule, method="doubledecker", data = Groceries)
+
+plot(oneRule, method = "doubledecker", data = Income)
+plot(oneRule, method = "mosaic", data = Income)
+```
+
+```{r}
+plot(income_ap2, method = "mosaic")
+```
+
+# 頻出アイテムの抽出
+## アルゴリズム Elcat
+アソシエーション分析に使われるアルゴリズムは
+- 幅優先探索 BFS: Breadth First Search
+- 深さ優先探索 DFS: Depth First Search
+
+Aprioriは幅優先で探索する検索アルゴリズムであり、arulesには、深さ優先のアルゴリズムである
+eclat(Equivalence Class Transformation)
+
+EclatとAprioriの比較における実証研究では
+- 最小支持度の減少による性能の悪化はEclatの方が少ない
+- 頻出アイテムが多いときはAprioriの方が性能が高くなる傾向にある
+
+```{r}
+income_ec <- eclat(Income)
+inspect(income_ec[1:5])
+
+income_ec2 <- subset(income_ec, subset = items %in% "income=$40,000+" & support > 0.2 & size(items) > 2)
+
+cat("income_ec2\n")
+inspect(income_ec2[1:5])
+```
+
+     
+アソシエーション分析では、抽出したルールにおいて、ルール同士の近さをクラスタリングすることで、
+クラスの特徴を考察することも有益である
+```{r}
+rules_ap <- subset(income_ap, subset = rhs %in% "income=$40,000+" & lift > 2)
+rules_ap
+
+d <- dissimilarity(rules_ap, method = "jaccard")
+
+plot(hclust(d, "ward.D"), hang = -1)
+```
+
+```{r}
+class3 <- hclust(d, "ward.D")$order[17:24]
+inspect(rules_ap[class3])
+```
+
+```{r}
+class4 <- hclust(d, "ward.D")$order[25:30]
+inspect(rules_ap[class4])
+```
+
+```{r}
+class1 <- hclust(d, "ward.D")$order[1:10]
+inspect(rules_ap[class1])
+```
+
+```{r}
+Groceries %>% head()
+ct <- crossTable(Groceries, sort = TRUE)
+ct[1:5, 1:5]
+```
+
+- coverage:
+ Provides the generic function and a method to calculate the coverage (support of the left-hand-side) of rules.
+```{r}
+rules <- apriori(Income)[1:5]
+```
+
+```{r}
+quality(rules)
+inspect(rules)
+
+quality(rules) <- cbind(quality(rules), coverage = coverage(rules))
+inspect(rules)
+```
+

@@ -1,0 +1,391 @@
+---
+title: "Ch.11 線形回帰分析"
+output: html_document
+date: "2023-12-25"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+# 線形回帰分析とは
+
+# 線形単回帰分析
+
+$$
+
+y = a + bx
+$$
+
+```{r}
+cars_lm <- lm(dist ~ speed, data = cars)
+summary(cars_lm)
+```
+
+## 残差   
+```{r}
+residuals(cars_lm) %>% head() # cars_lm$residuals
+```
+
+## 回帰式と回帰係数
+
+```{r}
+coefficients(cars_lm)
+```
+
+- 残差の平方和
+
+$$
+S_e = \sum(y_i - \hat{y}_i)^2
+$$
+
+```{r}
+y <- cars$dist
+y_hat <- predict(cars_lm)
+
+Se <- sum((y - y_hat)^2)
+Se
+```
+- 残差の不偏分散
+
+$$
+s_e^2 = \frac{S_e}{n - k - 1}
+$$
+
+```{r}
+se_2 <- Se / (nrow(cars) - 1 - 1)
+se_2
+
+sqrt(se_2)
+```
+
+- 係数aの標準誤差
+
+$$
+SE(a) = \sqrt{s_e^2 [\frac{1}{n} + \frac{\bar{x}^2}{\sum(x_i - \bar{x})^2}]}
+$$
+
+```{r}
+x_bar <- mean(cars$speed)
+x <- cars$speed
+
+se_a <- sqrt(se_2 * (1 / nrow(cars) + x_bar^2 / sum((x - x_bar)^2)))
+se_a
+```
+
+- 係数bの標準誤差
+$$
+SE(b) = \sqrt{\frac{s_e^2}{\sum(x_i - \bar{x})^2}}
+$$
+```{r}
+se_b <- sqrt(se_2 / sum((x - x_bar)^2))
+se_b
+```
+
+- 係数aのt
+
+$$
+t_a = \frac{a}{SE(a)}
+$$
+```{r}
+coefficients(cars_lm)[[1]] / se_a
+```
+
+
+
+- 係数bのt
+
+$$
+t_b = \frac{b}{SE(b)}
+$$
+```{r}
+coefficients(cars_lm)[[2]] / se_b
+```
+
+
+- 決定係数
+$$
+R^2 = \frac{S_R}{S_T}
+$$
+```{r}
+res_lm <- summary(cars_lm)
+cat("res_lm$r.squared = \n")
+res_lm$r.squared
+
+
+S_R <- sum((y_hat - mean(y))^2)
+S_T <- sum((y - mean(y))^2)
+
+cat("S_R / S_T = \n")
+S_R / S_T
+```
+
+- 調整済み決定係数
+$$
+R = 1 - \frac{S_e / (n - k - 1)}{S_T / (n - 1)}
+$$
+```{r}
+res_lm$adj.r.squared
+
+S_e <- sum((y - y_hat)^2)
+
+1 - ( S_e / (nrow(cars) - 1 - 1) ) / ( S_T / (nrow(cars) - 1))
+```
+
+- y偏差の平方和
+$$
+
+S_T = \sum(y_i - \bar{y})^2
+
+$$
+
+- \hat{y}_i偏差の平方和
+$$
+S_R = \sum(\hat{y}_i - \bar{y})^2
+
+$$
+- 残差の平方和
+$$
+\sum(y_i - \hat{y}_i)^2
+$$
+
+- 平方和の関係
+$$
+S_T = S_R + S_e
+$$
+
+
+線形回帰分析において、すべての回帰係数がゼロであるという帰無仮説の統計検定量を $F$ 値と $p$ 値で表す
+このとき $F$ 値は下記の数式で表現される
+
+$$
+
+F = \frac{R^2}{1 - R^2}  \frac{n-k-1}{k}
+
+$$
+
+## 回帰診断図
+```{r}
+plot(cars_lm)
+```
+
+- 個別データとクックの距離に関して
+
+クック距離：個別のデータが外れ値になり、回帰モデルに過剰な影響を与えているかどうかを判断するための統計量
+
+クック距離が0.5以上の場合、モデルへの影響度が大きいと考えられ、
+1以上の場合は特に大きいと考えられる
+```{r}
+plot(cars_lm, which = 4)
+```
+
+- クックの距離とてこ比の関係
+```{r}
+plot(cars_lm, which = 6)
+```
+
+てこ比とクック距離は下記の関数で表すことができる
+```{r}
+hat(cars)
+
+cooks.distance(cars_lm)
+```
+
+# 線形重回帰分析
+
+```{r}
+summary(aov(Ozone ~ ., data = airquality[, 1:4]))
+```
+
+```{r}
+anova(lm(Ozone ~., data = airquality[, 1:4]))
+```
+
+# car package
+
+car: Companion to Applied Regression
+
+CRAN - Package car
+https://cran.r-project.org/web/packages/car/index.html
+
+```{r}
+library(car)
+```
+## Component+Residual (Partial Residual) Plots
+
+Partial Residualsは次のように定義される
+
+$$
+PR_i = e_i + \beta_i X_{1i}
+$$
+
+この時 C+R Plotで $X_1$ について、線形性が成り立っていれば、
+線形性が成り立っていればプロットは直線になります。
+
+```{r}
+crPlots(m<-lm(prestige ~ income + education, data=Prestige))  # or crp(m)
+```
+## Spread-Level Plots
+```{r}
+slp(m)
+```
+## Regression Leverage Plots
+```{r}
+leveragePlots(m)
+```
+
+
+# 改めて、回帰分析の診断方法
+
+回帰分析はいくつかの前提条件がある
+- 正規性
+- 独立性
+- 線形性
+- 等分散性
+
+上記が満たされているかをチェックする必要がある
+
+```{r}
+res_lm <- lm(prestige ~ income + education, data=Prestige)
+summary(res_lm)
+```
+
+## 前提のチェック
+### 正規性のチェック
+```{r}
+plot(res_lm, which = 2)
+
+qqPlot(res_lm)
+```
+117のデータが外れ値になっているので、残差 / ステューデント残差で見てみる
+```{r}
+residuals(res_lm) %>% head()
+rstudent(res_lm) %>% head() # スチューデント化残差（= 残差 / 標準偏差）
+```
+
+### 独立性のチェック
+```{r}
+durbinWatsonTest(res_lm)
+```
+
+p > 0.05 であるため自己相関があるとは言えません（つまり独立性が示唆される）。
+
+### 線形性のチェック
+
+目的変数が説明変数と線形な関係を持つという条件をチェック
+
+```{r}
+crPlots(res_lm)
+```
+
+直線は線形モデルのフィットで、曲線は Loes による曲線
+
+各説明変数の図において、2つの線が重なっているかどうかを確認
+重なっている場合は線形性が満たされていると考える
+
+### 等分散性 / Homoscedasticity
+- 目的変数の分散が位置によらず一定であるという条件
+
+```{r}
+plot(res_lm, which = c(1, 3))
+
+ncvTest(res_lm) # Non-Constant Error Variance Test
+spreadLevelPlot( res_lm ) # or slp(res_lm)
+```
+- ncv test
+この検定は等分散であることを帰無仮説、予測値の値によって分散が異なることを対立仮説とする。
+つまり、
+p < .05 で帰無仮説が棄却されると、等分散ではないという仮説が支持される。
+p > .05の場合帰無仮説が棄却されないので、等分散であるという仮説が支持される
+
+- Heteroscedasticity-Corrected Covariance Matrices
+Calculates heteroscedasticity-corrected covariance matrices linear models fit by least squares or 
+weighted least squares. These are also called “White-corrected” or “White-Huber” covariance matrices.
+
+Heteroscedasticity: 分散不均一性
+Homoscedasticity: 等分散性
+
+Hetero -scedasticity: 分散不均一性
+Homo   -scedasticity: 等分散性
+```{r}
+hccm(res_lm)
+```
+
+## 変数が異常値ないかのチェック
+### VIFのチェック
+```{r}
+vif(res_lm)
+```
+
+### Bonferonni法
+```{r}
+outlierTest(res_lm) # Bonferonni 法でp値を調整
+```
+
+### ハット値による説明変数の外れ具合
+
+ハット行列の対角成分がいわゆるてこ比
+
+
+```{r}
+plot(hatvalues(res_lm))
+
+plot(res_lm, which = 5)
+```
+
+
+
+### クック距離を使ったチェック
+
+クック距離：個別のデータが外れ値になり、回帰モデルに過剰な影響を与えているかどうかを判断するための統計量
+
+クック距離が0.5以上の場合、モデルへの影響度が大きいと考えられ、
+1以上の場合は特に大きいと考えられる
+
+```{r}
+plot(res_lm, which = 4)
+```
+
+### 偏回帰 added-variableプロット / 偏回帰レバレッジ partial-regression leverage プロット
+
+変数 X1についてのAV plotは、次の2つをx軸, y軸にとってプロットしたものです。
+
+y軸：アウトカム Y を X1 を除いた変数で回帰したときの残差 e(Y|X2)
+x軸：説明変数 X1 を X1 を除いた変数で回帰したときの残差 e(X1|X2)
+
+このプロットの傾きが0（= 水平）であれば、
+「他の変数が含まれている状態では変数 X1によって追加される情報はない」ということになります。
+「この変数を追加して意味があるか」が分かるだけで、線形性については判断できないとのこと。
+（なので厳密には線形性の評価方法とは言えないようです。）
+ 
+ 
+```{r}
+avPlots(res_lm, ask = FALSE)
+
+leveragePlots(res_lm)
+# the leverage plot is a rescaled version of the usual added-variable (partial-regression) plot.
+```
+### 影響プロット
+- ハット値は説明変数の外れ具合
+- ステューデント化残差は目的変数の外れ具合
+- 円の面積はクックの距離で、2つの外れ具合の両方を表す
+```{r}
+influencePlot(res_lm)
+```
+
+### 取り除きによる回帰診断
+
+```{r}
+influence.measures(res_lm, infl = influence(res_lm))
+```
+
+### gvlma()を用いた妥当性のチェック
+
+線形モデルの仮定の妥当性についての様々な基準についての検定を行えます
+```{r}
+library(gvlma)
+gvmodel <- gvlma(res_lm)
+summary(gvmodel)
+```
+

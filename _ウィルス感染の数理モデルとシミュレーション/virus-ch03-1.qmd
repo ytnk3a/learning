@@ -1,0 +1,130 @@
+---
+title: "virus-ch03-1"
+format: html
+---
+
+```{r}
+rm(list = ls(all = TRUE))
+library(GillespieSSA2)
+library(doParallel)
+
+library(tidyverse)
+```
+
+
+## 直接法
+```{r}
+## パラメータ
+## k_det, k_att, k_int, k_ccc, k_di, k_dc, K
+pars <- c(3.38, 0.16, 3.07, 0.65, 1.94, 0.12, 3.73)
+names(pars) <- c("k_det", "k_att", "k_int", "k_ccc", "k_di", "k_dc", "K")
+
+initial_state <- c(V_det = 1, V_att = 130, V_int = 1, V_ccc = 1)
+
+reactions <- list(
+    # propensity function  effects          name for reaction
+    reaction(~k_det*V_att, c(V_att = -1, V_det = +1), "E_1"),
+    reaction(~k_att*V_det, c(V_det = -1, V_att = +1), "E_2"),
+    reaction(~k_int*V_att, c(V_att = -1, V_int = +1), "E_3"),
+    reaction(~k_ccc*V_int, c(V_int = -1, V_ccc = +1), "E_4"),
+    reaction(~k_ccc*V_ccc*V_int/K, c(V_ccc = -1, V_int = +1), "E_5"),
+    reaction(~k_di*V_int, c(V_int = -1), "E_6"),
+    reaction(~k_dc*V_ccc, c(V_ccc = -1), "E_7")
+)
+
+model_HBV <- function(pars, method = ssa_exact()) {
+    ssa(
+        initial_state = initial_state,
+        reactions = reactions,
+        params = pars,
+        method = method,
+        final_time = 70/24,
+        census_interval = .01,
+        verbose = FALSE
+    )
+}
+
+time_start <- Sys.time()
+
+## 並列計算のための並列バックエンドの登録
+cores <- getOption("mc.cores", detectCores())
+cl <- makeCluster(cores)
+registerDoParallel(cl)
+
+## 10回のシミュレーション
+results_HBV <- foreach(i = 1:10, .packages = 'GillespieSSA2') %dopar% {
+    model_HBV(pars = pars)
+}
+
+## クラスターの終了 !途中で止まったなどで実行されない場合は個別に実行!
+stopCluster(cl)
+rm(cl)
+
+time_end <- Sys.time()
+time_gillespiessa <- time_end - time_start
+print(paste("経過時間", time_gillespiessa))
+
+data_plot <- data.frame()
+for (i in 1:10) {
+    data_temp <- pivot_longer(cbind(as.data.frame(results_HBV[[i]]$state), time = results_HBV[[i]]$time),
+                              cols = -time, names_to = "label", values_to = "values")
+    data_plot <- rbind(data_plot, cbind(data_temp, run = paste("run", i, sep = "_")))
+}
+
+data_plot <- mutate(data_plot, label_run = paste(label, run, sep = "_"))
+
+ggplot(data = data_plot,
+       aes(x = time, y = values, group = label_run, color = label)) +
+    geom_line()
+
+
+## ODEの数値解
+d_results_HBV <- model_HBV(pars = pars, method = ode_em(noise_strength = 0))
+
+
+data_plot <- pivot_longer(cbind(as.data.frame(d_results_HBV$state), time = d_results_HBV$time),
+                        cols = -time, names_to = "label", values_to = "values")
+
+ggplot(data = data_plot,
+       aes(x = time, y = values, color = label)) +
+    geom_line()
+
+
+```
+
+## tau-leap法
+```{r}
+time_start <- Sys.time()
+
+## 並列計算のための並列バックエンドの登録
+cores <- getOption("mc.cores", detectCores())
+cl <- makeCluster(cores)
+registerDoParallel(cl)
+
+## 10回のシミュレーション
+results_HBV_tauleaping <- foreach(i = 1:10, .packages = 'GillespieSSA2') %dopar% {
+    model_HBV(pars = pars, method = ssa_etl(tau = 0.01))
+}
+
+## クラスターの終了 !途中で止まったなどで実行されない場合は個別に実行!
+stopCluster(cl)
+rm(cl)
+
+time_end <- Sys.time()
+time_gillespiessatauleaping <- time_end - time_start
+print(paste("経過時間", time_gillespiessatauleaping))
+
+data_plot <- data.frame()
+for (i in 1:10) {
+    data_temp <- pivot_longer(cbind(as.data.frame(results_HBV_tauleaping[[i]]$state), time = results_HBV_tauleaping[[i]]$time),
+                              cols = -time, names_to = "label", values_to = "values")
+    data_plot <- rbind(data_plot, cbind(data_temp, run = paste("run", i, sep = "_")))
+}
+
+data_plot <- mutate(data_plot, label_run = paste(label, run, sep = "_"))
+
+ggplot(data = data_plot,
+       aes(x = time, y = values, group = label_run, color = label)) +
+    geom_line()
+```
+

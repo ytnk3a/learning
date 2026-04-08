@@ -1,0 +1,387 @@
+---
+title: "ch03-linear-regression"
+format: html
+---
+
+```{r}
+library(tidyverse)
+library(MASS)
+library(ISLR)
+library(glmtoolbox)
+```
+```{r}
+data(advertising)
+head(advertising)
+```
+## 3.1 線形単回帰
+
+### 3.1.1 係数の推定
+最小二乗法（OLS）により、RSS(残差平方和, Residual sum Squares)を最小化するような係数を選ぶ
+
+RSSを数式で与えると
+$$
+RSS = e_1^2 + e_2^2 + e_3^2+\cdots+e_n^2
+$$
+と表される
+
+このRSSを偏微分することで、最小値を与えるときの係数は
+
+$$
+\begin{align}
+\hat{\beta_1} &= \frac{\sum^n_{i=1}(x_i - \bar{x})(y_i - \bar{y})}{\sum^n_{i=1} (x_i- \bar{x})^2} \\
+\hat{\beta_0} &= \bar{y} - \hat{\beta_1}\bar{x}
+\end{align}
+$$
+となる。
+
+下記にて、単回帰分析を行う
+```{r}
+fit_lm <- lm(sales ~ TV, data = advertising)
+fit_lm
+```
+
+### fig 3.1
+
+```{r}
+with(advertising, {
+  plot(TV, sales, col = "tomato", pch = 19)
+  abline(fit_lm$coefficients, col = "steelblue")
+})
+```
+
+### fig 3.2係数の等高線プロット
+
+
+### fig 3.3 
+```{r, fig.asp=1}
+x <- runif(100, -2, 2)
+y <- 2 + 3 * x + rnorm(100, mean = 0, sd = 5)
+
+res_sim <- lm(y ~ x)
+
+plot(x, y, frame = FALSE)
+abline(2, 3, col = "red")
+abline(res_sim$coefficients, col = "steelblue")
+
+
+plot(
+  0, 0, type = "n", 
+  xlim = c(-2, 2), ylim = c(-5, 10), 
+  xlab = "x", ylab = "y", 
+  frame = FALSE
+  )
+beta0 <- rep(0, 10)
+beta1 <- rep(0, 10)
+
+for (i in 1:10) {
+  x <- runif(100, -2, 2)
+  y <- 2 + 3 * x + rnorm(100, mean = 0, sd = 5)
+  res_sim <- lm(y ~ x)
+  abline(res_sim$coefficients, col = "steelblue")
+  beta0[i] <- res_sim$coefficients[1]
+  beta1[i] <- res_sim$coefficients[2]
+}
+abline(2, 3, col = "red", lwd = 3)
+abline(mean(beta0), mean(beta1), col = "blue", lwd = 3)
+```
+
+## 3.2 線形重回帰
+```{r}
+fit_lm_all <- lm(sales ~ TV + radio + newspaper, data = advertising)
+fit_lm_all
+
+fit_lm_tv <- lm(sales ~ TV, data = advertising)
+fit_lm_tv
+
+fit_lm_rad <- lm(sales ~ radio, data = advertising)
+fit_lm_rad
+
+fit_lm_np <- lm(sales ~ newspaper, data = advertising)
+fit_lm_np
+
+cor(advertising)
+
+fit_lm_tv2 <- lm(scale(sales) ~ scale(TV), data = advertising)
+fit_lm_tv2
+
+```
+
+
+## 3.3.2 線形モデルの拡張
+- 交互作用項
+```{r}
+
+res_fit <- lm(sales ~ TV + radio + radio:TV, data = advertising)
+summary(res_fit)
+
+res_fit <- lm(sales ~ TV*radio, data = advertising)
+summary(res_fit)
+
+```
+
+```{r}
+library(interactions)
+
+interact_plot(res_fit, pred = TV, modx = radio)
+
+```
+
+
+```{r}
+credit <- Credit %>% 
+  mutate(
+    balance = Balance,
+    income = Income,
+    is_student = if_else(Student == "Yes", 1, 0)
+  )
+lm_credit <- lm(Balance ~ Income + Student, data = Credit)
+summary(lm_credit)
+lm_credit <- lm(balance ~ income + is_student, data = credit)
+summary(lm_credit)
+```
+
+```{r}
+credit <- Credit %>% 
+  mutate(
+    balance = Balance,
+    income = Income,
+    is_student = if_else(Student == "Yes", 1, 0)
+  )
+lm_credit <- lm(balance ~ income + is_student, data = credit)
+summary(lm_credit)
+
+coef_credit <- coef(lm_credit)
+plot(credit$income, credit$balance, type = "n", xlim = c(0, 200), ylim = c(0, 2000))
+abline(coef_credit[1] + coef_credit[3], coef_credit[2], col = "red")
+abline(coef_credit[1], coef_credit[2], col = "black")
+legend(
+  "topleft",
+  legend = c("is_Student=1", "is_Student=0"),
+  col = c("red", "black"),
+  lty = c("solid", "solid")
+)
+
+library(interactions)
+interact_plot(lm_credit, pred = income, modx = is_student)
+```
+- 係数に対しての交互作用項を考えると
+```{r}
+credit <- Credit %>% 
+  mutate(
+    balance = Balance,
+    income = Income,
+    is_student = if_else(Student == "Yes", 1, 0)
+  )
+lm_credit <- lm(balance ~ income * is_student, data = credit)
+summary(lm_credit)
+
+coef_credit <- coef(lm_credit)
+plot(credit$income, credit$balance, type = "n", xlim = c(0, 200), ylim = c(0, 2000))
+abline(coef_credit[1] + coef_credit[3], coef_credit[2] + coef_credit[4], col = "red")
+abline(coef_credit[1], coef_credit[2], col = "black")
+legend(
+  "topleft",
+  legend = c("is_Student=1", "is_Student=0"),
+  col = c("red", "black"),
+  lty = c("solid", "solid")
+)
+
+interact_plot(lm_credit, pred = income, modx = is_student)
+```
+```{r}
+res_ln <- lm(mpg ~ horsepower, data = Auto)
+res_ln_2 <- lm(mpg ~ poly(horsepower, 2), data = Auto)
+res_ln_5 <- lm(mpg ~ poly(horsepower, 5), data = Auto)
+
+with(Auto, {
+  plot(horsepower, mpg)
+  points(horsepower, res_ln$fitted.values, pch = 20, col = "red")
+  points(horsepower, res_ln_2$fitted.values, pch = 20, col = "blue")
+  points(horsepower, res_ln_5$fitted.values, pch = 20, col = "steelblue")
+  legend(
+    "topright",
+    legend = c("Observation", "linear", "2nd", "5th"),
+    col = c("black", "red", "blue", "steelblue"),
+    pch = c(1, 20, 20, 20)
+  )
+})
+
+with(Auto, {
+  ord <- order(horsepower)
+  plot(horsepower, mpg)
+  lines(horsepower[ord], res_ln$fitted.values[ord], pch = 20, col = "red")
+  lines(horsepower[ord], res_ln_2$fitted.values[ord], pch = 20, col = "blue")
+  lines(horsepower[ord], res_ln_5$fitted.values[ord], pch = 20, col = "steelblue")
+  legend(
+    "topright",
+    legend = c("Observation", "linear", "2nd", "5th"),
+    col = c("black", "red", "blue", "steelblue"),
+    pch = c(1, 20, 20, 20)
+  )
+})
+
+
+data.frame(
+  hw  = Auto$horsepower,
+  mpg = Auto$mpg,
+  res = res_ln$fitted.values,
+  res_2 = res_ln_2$fitted.values,
+  res_5 = res_ln_5$fitted.values
+) %>% 
+  ggplot(aes(x = hw)) +
+  geom_point(aes(y = mpg)) +
+  geom_line(aes(y = res_2)) +
+  geom_path(aes(y = res_2))
+```
+
+```{r}
+lm(mpg ~ poly(horsepower, 2), data = Auto)
+lm(mpg ~ poly(horsepower, 2, raw = TRUE), data = Auto)
+lm(mpg ~ horsepower + I(horsepower^2), data = Auto)
+```
+
+### 3.3.3 起こりうる問題
+
+```{r, fig.width=10}
+par(mfrow = c(1, 2))
+plot(lm(mpg ~ horsepower, data = Auto), which = 1)
+plot(lm(mpg ~ horsepower + I(horsepower^2), data = Auto), which = 1)
+```
+
+### fig 3.10 誤差の相関
+
+```{r, fig.height=10}
+
+plot_islr_fig0310 <- function(.phi) {
+  # set.seed(1) # 再現性のため
+  n <- 100      # サンプルサイズ
+  # phi <- 0      # AR(1)のパラメータ
+  sigma <- 2   # ノイズの標準偏差
+  
+  # AR(1)乱数を生成
+  e <- arima.sim(model = list(ar = .phi), n = n, sd = sigma)
+  e <- e / max(e)
+  x <- rnorm(n, 0, 3)
+  
+  y <- 3 * x + e
+  
+  plot(lm(y ~ x)$resid, type = "b")
+  
+}
+
+par(mfrow = c(3, 1))
+plot_islr_fig0310(0)
+plot_islr_fig0310(0.5)
+plot_islr_fig0310(0.9)
+
+```
+
+```{r}
+# 母相関係数0.7のデータを作ってみる
+rho <- 0.7
+x  <- rnorm(n = 1000, mean = 0, sd = 3)
+e1 <- rnorm(n = 1000, mean = 0, sd = 3)
+e2 <- rnorm(n = 1000, mean = 0, sd = 3)
+y1 <- sqrt(rho)*x+sqrt(1-rho)*e1
+y2 <- sqrt(rho)*x+sqrt(1-rho)*e2
+cor(y1,y2)
+plot(y1, y2)
+
+
+```
+### fig 3.11
+```{r}
+# par(mfrow = c(1, 2))
+plot(lm(mpg ~ horsepower, data = Auto), which = c(1, 3))
+plot(lm(log(mpg) ~ horsepower, data = Auto), which = 1)
+```
+
+### fig 3.12
+```{r}
+par(mfrow = c(1, 2))
+plot(lm(mpg ~ horsepower, data = Auto), which = c(1,3))
+```
+
+
+## 3.6 実習：線形回帰
+```{r}
+fix(Boston)
+```
+
+列名の確認を`names()`関数を用いて行う
+```{r}
+names(Boston)
+```
+
+`attach()`関数を用いることで、データフレームに格納されている列を変数として扱うことができる
+
+```{r}
+fit_lm <- lm(medv ~ lstat, data = Boston)
+summary(fit_lm)
+
+attach(Boston)
+fit_lm2 <- lm(medv ~ lstat)
+
+summary(fit_lm2)
+```
+
+`lm()`で計算された結果にどういった属性が付与されているかを
+`names()`関数を使って一覧化する
+```{r}
+names(fit_lm)
+```
+
+係数の値と信頼区間は`coef()`と`coefint()`の関数で求めることができる
+```{r}
+coef(fit_lm)
+confint(fit_lm)
+```
+`predict()`関数を使って、あるlsta(説明変数)tの値におけるmdev(目的変数)の信頼区間と予測区間を求めることができる
+
+
+```{r}
+# 信頼区間: interval = "confidence"
+predict(fit_lm, newdata = data.frame(lstat = c(5, 10, 15)), interval = "confidence")
+
+# 予測区間: interval = "prediction"
+predict(fit_lm, newdata = data.frame(lstat = c(5, 10, 15)), interval = "prediction")
+```
+線形回帰の結果と散布図を描くには
+```{r}
+plot(lstat, medv)
+abline(fit_lm)
+```
+
+グラフを調整する際は `lwd`や`col`などの引数を変える
+```{r}
+plot(lstat, medv)
+abline(fit_lm, lwd = 3)
+
+plot(lstat, medv)
+abline(fit_lm, lwd = 3, col = "red")
+```
+```{r}
+plot(fit_lm)
+```
+```{r}
+par(mfrow = c(2, 2))
+plot(fit_lm)
+```
+線形回帰の残差分析やスチューデント化残差も下記で求めることができる
+
+残差プロットとみると、非線形性が見れるので、予測変数に対するてこ比を`hatvlaues()`関数でみる。
+
+```{r}
+plot(predict(fit_lm), residuals(fit_lm))
+plot(predict(fit_lm), rstudent(fit_lm))
+plot(hatvalues(fit_lm))
+
+which.max(hatvalues(fit_lm))
+```
+
+### 3.6.3 線形重回帰
+## 3.7 演習問題
+```{r}
+
+```
+

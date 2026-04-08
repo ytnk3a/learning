@@ -1,0 +1,121 @@
+---
+title: "Ch.10"
+output: html_document
+date: "2023-08-08"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 10.4 ロジット回帰
+
+```{r}
+dose <- c(1, 1.3, 1.7, 2.2, 2.4, 2.8, 3.1, 3.5, 3.7, 4.2, 4.5, 4.7, 4.9, 5.1, 5.4, 5.7, 6)
+dead <- c(0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 1, 1, 1)
+live <- 1 - dead
+
+
+fit_logi <- glm(cbind(dead, live) ~ dose, family = binomial(logit))
+summary(fit_logi)
+
+# fit_logi2 <- glm(cbind(dead, 1 - dead) ~ dose, family = binomial(logit))
+# summary(fit_logi2)
+```
+
+```{r, fig.width=6, fig.height=6}
+pred_dose <- seq(1.0, 6.0, 0.01)
+pred_y <- 1 / (1 + exp(-(fit_logi$coefficients[1] + fit_logi$coefficients[2] * pred_dose)))
+
+plot(dose, dead, xlab = "dose", ylab = "mortality")
+lines(pred_dose, pred_y, col = "gray", lwd = 2)
+```
+
+## 10.5
+```{r}
+wt <- c(17.3, 18.5, 20.5, 21.2, 20.8, 21.5, 22.1, 22.7, 22.6, 22.3, 23.6, 23.5, 24.0, 24.4,
+        24.7, 25.1, 25.9, 26.4, 27.2, 27.4, 27.8, 28.2, 28.8, 29.1, 29.3, 29.7, 30.2, 30.3,
+        30.6, 30.9, 31.5, 31.8, 32.8, 33.1, 33.7, 34.5, 35.2, 35.7, 35.9, 36.1, 36.4, 36.8)
+
+flw <- c(1, 2, 0, 3, 0, 1, 1, 0, 2, 1, 2, 3, 4, 5, 1, 2, 4, 3, 5, 6, 7,
+         3, 2, 4, 7, 6, 6, 2, 7, 8, 7, 4, 3, 4, 6, 8, 4, 7, 6, 5, 9, 4)
+
+res_pois <- glm(flw ~ wt, family = poisson)
+summary(res_pois)
+plot(wt, flw, xlab = "bulb weight", ylab = "No. of Flowers", xlim = c(20, 40), ylim = c(0, 10))
+
+```
+
+```{r, fig.width=5, fig.asp=1}
+set.seed(1)
+
+d <- rpois(50, lambda = 3)
+mean(d)
+logL <- \(x) sum(dpois(d, x, log = TRUE))
+
+lambda_seq <- seq(2, 5, 0.1)
+plot(lambda_seq, sapply(lambda_seq, logL), ylab = "log L", type = "l")
+abline(v = mean(d))
+```
+
+
+## 10.7 AIC
+```{r}
+logLik(fit_logi)
+summary(fit_logi)
+AIC(fit_logi)
+```
+
+## 10.8
+```{r}
+flw <- c(1, 2, 0, 3, 0, 1, 1, 0, 2, 1, 2, 3, 4, 5, 1, 2, 4, 3, 5, 6, 7,
+         3, 2, 4, 7, 6, 6, 2, 7, 8, 7, 4, 3, 4, 6, 8, 4, 7, 6, 5, 9, 4)
+
+
+wt <- c(17.3, 18.5, 20.5, 21.2, 20.8, 21.5, 22.1, 22.7, 22.6, 22.3, 23.6, 23.5, 24.0, 24.4,
+        24.7, 25.1, 25.9, 26.4, 27.2, 27.4, 27.8, 28.2, 28.8, 29.1, 29.3, 29.7, 30.2, 30.3,
+        30.6, 30.9, 31.5, 31.8, 32.8, 33.1, 33.7, 34.5, 35.2, 35.7, 35.9, 36.1, 36.4, 36.8)
+23
+res_pois <- glm(flw ~ wt, family = poisson)
+summary(res_pois)
+logLik(res_pois) *-2
+```
+
+```{r}
+-2 * -73.790
+```
+
+```{r}
+sum(log(dpois(flw, lambda = flw))) * -2
+```
+
+```{r}
+-2 * -73.790 - -2 * -61.59914
+```
+```{r}
+logLik(glm(flw ~ 1, family = poisson)) * -2
+```
+
+## 10.10 GLMにおけるオフセットの利用
+
+```{r}
+light <- c(3500, 2300, 700,  500, 2900, 2300, 1200, 900, 300, 2500, 500, 1800, 900, 4000, 2800)
+plants <- c(4, 2, 2, 0, 4, 3, 1, 2, 0, 4, 0, 1, 0, 5, 4)
+w_area <- c(6.5, 7.3, 12.3, 4.3, 17.5, 13.1, 8.1, 13.7, 4.3, 15.2, 3.3, 7.5, 5.9, 11.5, 9.7)
+
+res_poi <- glm(plants ~ light, offset = log(w_area), family = poisson)
+summary(res_poi)
+
+res_poi2 <- glm(plants ~ light, family = poisson)
+summary(res_poi2)
+```
+
+```{r}
+light_seq <- seq(0, 4000, 0.1)
+par(mfrow = c(1, 2))
+plot(plants ~ light)
+plot(plants / w_area ~ light, )
+pred_y <- exp(res_poi$coefficients[1] + res_poi$coefficients[2] * light_seq)
+lines(light_seq, pred_y, col = "gray")
+```
+

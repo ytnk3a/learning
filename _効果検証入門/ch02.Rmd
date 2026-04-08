@@ -1,0 +1,480 @@
+---
+title: "Ch.02"
+output: html_document
+date: "2024-12-19"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+library(tidyverse)
+library(broom)
+
+dir_dbx <- "C:/Users/d19008/dentsuDropbox Dropbox/Yuu TANAKA"
+dir_dat <- "work-place/000-data"
+dir_wk <- "book/効果検証入門"
+fname <- file.path(
+  dir_dbx,
+  dir_dat,
+  dir_wk,
+  "Kevin_Hillstrom_MineThatData_E-MailAnalytics_DataMiningChallenge_2008.03.20.csv"
+)
+
+
+email_data <- read_csv(fname)
+
+```
+
+```{r}
+email_data
+```
+
+回帰分析を使うことで、よりセクションバイアスの影響が少ない分析ができ、
+回帰分析は最も基本的なセレクションバイアスの削減方法である
+
+
+
+```{r}
+# (4) 女性向けメールが配信されたデータを削除したデータを作成
+male_df <- email_data %>%
+ filter(segment != "Womens E-Mail") %>% # 女性向けメールが配信されたデータを削除
+ mutate(treatment = ifelse(segment == "Mens E-Mail", 1, 0)) # 介入を表すtreatment変数を追加
+
+# (5) セレクションバイアスのあるデータを作成
+## seedを固定
+set.seed(1)
+
+## 条件に反応するサンプルの量を半分にする
+obs_rate_c <- 0.5
+obs_rate_t <- 0.5
+
+## バイアスのあるデータを作成
+biased_data <- male_df %>%
+ mutate(obs_rate_c =
+      ifelse( (history > 300) | (recency < 6) |
+           (channel == "Multichannel"), obs_rate_c, 1),
+     obs_rate_t =
+      ifelse( (history > 300) | (recency < 6) |
+           (channel == "Multichannel"), 1, obs_rate_t),
+     random_number = runif(n = NROW(male_df))) %>%
+ filter( (treatment == 0 & random_number < obs_rate_c ) |
+      (treatment == 1 & random_number < obs_rate_t) )
+```
+
+
+```{r}
+# (6) バイアスのあるデータでの回帰分析
+## 回帰分析の実行
+biased_reg <- lm(data = biased_data, formula = spend ~ treatment + history)
+
+## 分析結果のレポート
+summary(biased_reg)
+
+## 推定されたパラメーターの取り出し
+biased_reg_coef <- tidy(biased_reg)
+biased_reg_coef
+```
+
+
+```{r}
+# (7) RCTデータでの回帰分析とバイアスのあるデータでの回帰分析の比較
+## RCTデータでの単回帰
+rct_reg <- lm(data = male_df, formula = spend ~ treatment)
+rct_reg_coef <- tidy(rct_reg)
+rct_reg_coef
+
+## バイアスのあるデータでの単回帰
+nonrct_reg <- lm(data = biased_data, formula = spend ~ treatment)
+nonrct_reg_coef <- tidy(nonrct_reg)
+nonrct_reg_coef
+
+## バイアスのあるデータでの重回帰
+nonrct_mreg <- lm(data = biased_data,
+         formula = spend ~ treatment + recency + channel + history)
+nonrct_mreg_coef <- tidy(nonrct_mreg)
+nonrct_mreg_coef
+
+```
+
+今回はtreatmentの係数に注目する
+バイアスのないデータの場合の係数は0.770であるが、
+バイアスのあるデータのときの係数は0.903かつ、P値も非常に小さいため、
+通常であれば、有意としてしまう。
+
+しかしバイアスのあるデータであっても、今回バイアスを発生させた変数
+`recency, channel, history`を共変量として、回帰式に加えることで、
+treatmentの係数が0.847と0.903から0.770へと近づいたことで、
+共変量を言えることでのセレクションバイアスの影響度を削減できることが確認できた
+
+どういった共変量を加えるかに関しては、
+目的変数と介入変数の両方に対して相関のある変数を加えるべきと考える
+
+
+ただ、共変量を追加することで、セレクションバイアスの影響をRCTに近づけることができたが、
+実際すべての共変量がデータとして存在するわけではない。
+
+本来必要だが、モデルに組み込むことができない変数（＝脱落変数）によって結果にかかる
+バイアスを脱落変数バイアスという
+
+$$
+\begin{align}
+Y_i &= \alpha_0 + \alpha_1 Z_i + u_i  &(model_A)\\
+Y_i &= \beta_0 + \beta_1 Z_i + \beta_2 X_{ommit, i} + e_i &(model_B)
+\end{align}
+$$
+
+モデルAとBを比べるとモデルAの誤差項$u_i$の中に、$\beta_2 X_{ommit, i} + e_i$ が含まれていることになるので、
+モデルAにおける介入効果$\alpha_1$には$\beta_1 + \gamma_1 \beta2$が含まれることが知られており、
+この$\gamma_1 \beta_2$が脱落変数バイアスと知られている
+
+
+
+```{r}
+# (9) OVBの確認(broomを利用した場合)
+## (a) history抜きの回帰分析とパラメーターの取り出し
+## (b) historyを追加した回帰分析とパラメーターの取り出し
+## (c) 脱落した変数と介入変数での回帰分析
+## broomの読み出し
+library(broom)
+
+## モデル式のベクトルを用意
+formula_vec <- c(spend ~ treatment + recency + channel, # モデルA
+        spend ~ treatment + recency + channel + history, # モデルB
+        history ~ treatment + channel + recency) # モデルC
+
+## formulaに名前を付ける
+names(formula_vec) <- paste("reg", LETTERS[1:3], sep ="_")
+
+## モデル式のデータフレーム化
+models = formula_vec %>%
+ enframe(name = "model_index", value = "formula")
+models
+
+## まとめて回帰分析を実行
+df_models <- models %>%
+ mutate(model = map(.x = formula, .f = lm, data = biased_data)) %>%
+ mutate(lm_result = map(.x = model, .f = tidy))
+df_models
+
+## モデルの結果を整形
+df_results <- df_models %>%
+ mutate(formula = as.character(formula)) %>%
+ select(formula, model_index, lm_result) %>%
+ unnest(cols = lm_result)
+
+df_results
+```
+
+
+```{r}
+
+## モデルA,B,Cでのtreatmentのパラメータを抜き出す
+treatment_coef <- df_results %>%
+ filter(term == "treatment") %>%
+ pull(estimate)
+
+treatment_coef
+
+## モデルBからhistoryのパラメータを抜き出す
+history_coef <- df_results %>%
+ filter(model_index == "reg_B",
+     term == "history") %>%
+ pull(estimate)
+
+
+## OVBの確認
+OVB <- history_coef*treatment_coef[3]
+coef_gap <- treatment_coef[1] - treatment_coef[2]
+OVB # beta_2*gamma_1
+coef_gap # alpha_1 - beta_1
+
+
+```
+
+よって、モデルを作成する上で、
+新しい変数と介入Zとの相関が0であるような場合は
+OVB自体は0となるため、その介入の効果の推定自体には影響を及ぼさない
+そのため、予測を目的とする以外の場合入れなくても問題はない。
+
+新たに追加しようとしている変数と、相関の強い変数をあらかじめ入れている場合、
+すでにOVBの値は小さくなっているため、新しい変数を加えても
+介入の効果は大きく変化しないことになる。
+そのため、すべての共変量をいれなくても、
+バイアスが十分に小さくなる可能性がある
+
+ここで、このOVBがすべて0になる状態（つまり、共変量の値が同じである場合、
+介入はランダムであること等しい）のことをCIA(Conditional Independence Assumption)と呼ぶ
+
+バイアスの評価自体ができないため、
+必要なデータの有無の判断、あったとしても、十分にバイアスが減っているかが分からない
+どのモデルが最良かという判断がつきにくいという2点の問題がある
+
+
+手持ちのデータには含まれない変数がセレクションバイアスを起こしているかを評価する方法として
+感度分析（Sensitivity Analysis）と呼ばれる方法があり、
+これは、重要であろうとしているもの以外の共変量を除去することで、
+効果の推定値が大きく変動しないかをみるもの
+変動が小さい場合は、他の変数による影響を受けにくいとし、
+変動が大きい場合は、ほかの変数の影響を受ける可能性があるため、評価に対して注意が必要
+
+
+```{r}
+# (10) 入れてはいけない変数を入れてみる
+#visitとtreatmentとの相関
+cor_visit_treatment <- lm(data = biased_data,
+             formula = treatment ~ visit + channel + recency + history) %>%
+ tidy()
+
+# visitを入れた回帰分析を実行
+bad_control_reg <- lm(data = biased_data,
+           formula = spend ~ treatment + channel + recency + history + visit) %>%
+ tidy()
+
+bad_control_reg
+```
+
+最後に、セレクションバイアスが減るからと言って、
+どんな変数を入れてもいいというわけではない
+介入の影響をうけるような変数をいれることで、回帰分析の結果にかかるバイアスを
+Post Treatment biasという
+
+たとえば、サイト来訪のように、購買とは関係があるが、
+基本的にはメール配信という介入の後の変数を入れると、
+treatmentの係数が0.29と大きく下がってしまっている
+
+# 2.3 回帰分析を利用した探索的な効果検証
+```{r}
+# (2) ライブラリとデータの読み込み
+library(experimentdatar)
+data(vouchers)
+vouchers
+
+# (3) Angrist(2002)のTable 3. bogota 1995の再現
+## 回帰式の準備
+### 回帰式で使う文字列の準備
+formula_x_base <- "VOUCH0"
+formula_x_covariate <- 
+  "SVY + HSVISIT + AGE + STRATA1 + STRATA2 + STRATA3 + STRATA4 + STRATA5 + STRATA6 + STRATAMS + 
+   D1993 + D1995 + D1997 + 
+   DMONTH1 + DMONTH2 + DMONTH3 + DMONTH4 + DMONTH5 + DMONTH6 +
+   DMONTH7 + DMONTH8 + DMONTH9 + DMONTH10 + DMONTH11 + DMONTH12 + SEX2"
+
+formula_y <- c(
+  "TOTSCYRS","INSCHL","PRSCH_C","USNGSCH","PRSCHA_1",
+  "FINISH6","FINISH7","FINISH8","REPT6","REPT","NREPT",
+  "MARRIED","HASCHILD","HOURSUM","WORKING3")
+
+### formula_yの各要素に対して共変量を含まない回帰式を作成
+base_reg_formula <- paste(formula_y, "~", formula_x_base)
+names(base_reg_formula) <- paste(formula_y, "base", sep = "_")
+
+### formula_yの各要素に対して共変量を含む回帰式を作成
+covariate_reg_formula <-
+ paste(formula_y, "~", formula_x_base, "+", formula_x_covariate)
+
+names(covariate_reg_formula) <-
+ paste(formula_y, "covariate", sep = "_")
+
+### モデル式のベクトルを作成
+table3_fomula <- c(base_reg_formula, covariate_reg_formula)
+
+### モデル式のベクトルをデータフレーム化する
+models <- table3_fomula %>%
+ enframe(name = "model_index", value = "formula")
+
+## 回帰分析を実行
+### bogota 1995のデータを抽出する
+regression_data <- vouchers %>% filter(TAB3SMPL == 1, BOG95SMP == 1)
+
+### まとめて回帰分析を実行
+df_models <- models %>%
+  mutate(model = map(
+    .x = formula,
+    .f = lm,
+    data = regression_data)) %>%
+  mutate(lm_result = map(.x = model, .f = tidy))
+
+### モデルの結果を整形
+df_results <- df_models %>%
+ mutate(formula = as.character(formula)) %>%
+ select(formula, model_index, lm_result) %>%
+ unnest(cols = c(lm_result))
+
+df_results
+```
+
+
+```{r}
+## 通学率と奨学金の利用傾向の可視化(ch2_plot2.png)
+### PRSCHA_1, USNGSCHに対するVOUCH0の効果を取り出す
+using_voucher_results <- df_results %>%
+ filter(term == "VOUCH0",
+     str_detect(model_index, "PRSCHA_1|USNGSCH")) %>%
+ select(model_index, term, estimate, std.error, p.value) %>%
+ arrange(model_index)
+
+### 取り出した効果をggplotで可視化
+using_voucher_results %>%
+ ggplot(aes(y = estimate, x = model_index)) +
+ geom_point() +
+ geom_errorbar(aes(ymax = estimate + std.error*1.96,
+          ymin = estimate - std.error*1.96,
+          width = 0.1)) +
+ theme(axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(hjust = 0.5),
+    legend.position = "bottom",
+    plot.margin = margin(0.5,1,0.5,1, "cm"))
+```
+
+
+```{r}
+## 留年の傾向を可視化
+### PRSCH_C,INSCHL,FINISH6-8,REPTに対するVOUCH0の効果を取り出す
+going_private_results <- df_results %>%
+ filter(term == "VOUCH0",
+     str_detect(model_index, "PRSCH_C|INSCHL|FINISH|REPT")) %>%
+ select(model_index, term, estimate, std.error, p.value) %>%
+ arrange(model_index)
+
+### 取り出した効果をggplotで可視化
+going_private_results %>%
+ filter(str_detect(model_index, "covariate")) %>%
+ ggplot(aes(y = estimate, x = model_index)) +
+ geom_point() +
+ geom_errorbar(aes(ymax = estimate + std.error*1.96,
+          ymin = estimate - std.error*1.96,
+          width = 0.1)) +
+ geom_hline(yintercept = 0, linetype = 2) +
+ theme(axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(hjust = 0.5),
+    legend.position = "bottom",
+    plot.margin = margin(0.5,1,0.5,1, "cm"))
+```
+
+
+```{r}
+# (4) Angrist(2002)のTable.4 & 6 bogota 1995の再現
+## table4に使うデータを抜き出す
+data_tbl4_bog95 <- vouchers %>%
+ filter(BOG95SMP == 1, TAB3SMPL == 1,
+     !is.na(SCYFNSH), !is.na(FINISH6), !is.na(PRSCHA_1),
+     !is.na(REPT6), !is.na(NREPT), !is.na(INSCHL),
+     !is.na(FINISH7),
+     !is.na(PRSCH_C), !is.na(FINISH8), !is.na(PRSCHA_2),
+     !is.na(TOTSCYRS), !is.na(REPT)
+ ) %>%
+ select(VOUCH0, SVY, HSVISIT, DJAMUNDI, PHONE, AGE,
+     STRATA1:STRATA6, STRATAMS, DBOGOTA, D1993, D1995, D1997,
+     DMONTH1:DMONTH12, SEX_MISS, FINISH6, FINISH7, FINISH8,
+     REPT6, REPT, NREPT, SEX2, TOTSCYRS, MARRIED, HASCHILD,
+     HOURSUM,WORKING3, INSCHL,PRSCH_C,USNGSCH,PRSCHA_1)
+
+## 女子生徒のみのデータでの回帰分析
+### 女子生徒のデータだけ取り出す
+regression_data <- data_tbl4_bog95 %>% filter(SEX2 == 0)
+
+### まとめて回帰分析を実行
+df_models <- models %>%
+ mutate(model = map(.x = formula, .f = lm, data = regression_data)) %>%
+ mutate(lm_result = map(.x = model, .f = tidy))
+
+### モデルの結果を整形
+df_results_female <- df_models %>%
+ mutate(formula = as.character(formula),
+     gender = "female") %>%
+ select(formula, model_index, lm_result, gender) %>%
+ unnest(cols = c(lm_result))
+
+## 男子生徒のみのデータでの回帰分析
+regression_data <- data_tbl4_bog95 %>% filter(SEX2 == 1)
+
+### まとめて回帰分析を実行
+df_models <- models %>%
+ mutate(model = map(.x = formula, .f = lm, data = regression_data)) %>%
+ mutate(lm_result = map(.x = model, .f = tidy))
+
+### モデルの結果を整形
+df_results_male <- df_models %>%
+ mutate(formula = as.character(formula),
+     gender = "male") %>%
+ select(formula, model_index, lm_result, gender) %>%
+ unnest(cols = c(lm_result))
+
+## 通学傾向への分析結果の可視化(ch2_plot3.png)
+### PRSCHA_1,USNGSCHに対する分析結果を抜き出す
+using_voucher_results_gender <- rbind(df_results_male, df_results_female) %>%
+ filter(term == "VOUCH0", str_detect(model_index, "PRSCHA_1|USNGSCH")) %>%
+ select(gender, model_index, term, estimate, std.error, p.value) %>%
+ arrange(gender, model_index) %>%
+ filter(str_detect(model_index, "covariate"))
+
+### ggplotによる可視化
+using_voucher_results_gender %>%
+ filter(str_detect(model_index, "covariate")) %>%
+ ggplot(aes(y = estimate, x = model_index)) +
+ geom_point() +
+ geom_errorbar(aes(ymax = estimate + std.error*1.96,
+          ymin = estimate - std.error*1.96,
+          width = 0.1)) +
+ geom_hline(yintercept = 0, linetype = 2) +
+ theme(axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(hjust = 0.5),
+    legend.position = "bottom",
+    plot.margin = margin(0.5,1,0.5,1, "cm")) +
+ facet_grid(gender ~ .)
+```
+
+
+```{r}
+## 留年と通学年数への分析結果の可視化(ch2_plot4.png)
+### PRSCH_C,INSCHL,REPT,TOTSCYRS,FINISHに対する分析結果を抜き出す
+going_private_results_gender <- rbind(df_results_male, df_results_female) %>%
+ filter(term == "VOUCH0",
+     str_detect(model_index, "PRSCH_C|INSCHL|REPT|TOTSCYRS|FINISH")) %>%
+ select(gender, model_index, term, estimate, std.error, p.value) %>%
+ arrange(model_index)
+
+### ggplotによる可視化
+going_private_results_gender %>%
+ filter(str_detect(model_index, "covariate")) %>%
+ ggplot(aes(y = estimate, x = model_index)) +
+ geom_point() +
+ geom_errorbar(aes(ymax = estimate + std.error*1.96,
+          ymin = estimate - std.error*1.96,
+          width = 0.1)) +
+ geom_hline(yintercept = 0, linetype = 2) +
+ theme(axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(hjust = 0.5),
+    legend.position = "bottom",
+    plot.margin = margin(0.5,1,0.5,1, "cm")) +
+ facet_grid(gender ~ .)
+
+## 労働時間に対する分析結果の可視化(ch2_plot5.png)
+### HOURに対する分析結果を抜き出す
+working_hour_results_gender <- rbind(df_results_male, df_results_female) %>%
+ filter(term == "VOUCH0", str_detect(model_index, "HOUR")) %>%
+ select(gender, model_index, term, estimate, std.error, p.value) %>%
+ arrange(gender, model_index)
+
+### ggplotによる可視化
+working_hour_results_gender %>%
+ filter(str_detect(model_index, "covariate")) %>%
+ ggplot(aes(y = estimate, x = model_index)) +
+ geom_point() +
+ geom_errorbar(aes(ymax = estimate + std.error*1.96,
+          ymin = estimate - std.error*1.96,
+          width = 0.1)) +
+ geom_hline(yintercept = 0, linetype = 2) +
+ theme(axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(hjust = 0.5),
+    legend.position = "bottom",
+    plot.margin = margin(0.5,1,0.5,1, "cm")) +
+ facet_grid(. ~ gender)
+```
+
+モデルのデータに対する説明能力や未知のサンプルに対する予測能力を高めることが、
+効果検証において有用であるという保証はにはならないため、
+因果推論の枠組みで考えられる回帰分析のプロセスでは
+予測能力はあまり重視されない。もちろん説明力を向上させることは、
+推定値の誤差を小さくする効果があるので、介入効果の検証として意味のないものではない

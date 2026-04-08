@@ -1,0 +1,62 @@
+---
+title: "ビジネスに活かすデータマイニング"
+output: html_document
+date: "2023-05-27"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# 第3章　その2つのデータ，本当に差があるの？　～仮説検定～
+## 3-1　それが偶然に起きたことか必然的に生じたことかを判定する＝仮説検定と有意確率
+## 3-2　t検定：いわゆる「有意差」を見つける代表的なメソッド
+
+ここでは`sleep`データを使ってT検定を行う
+`sleep`データは
+- extra:増加した睡眠時間
+- group: 薬剤を投与したかグループとそうでないグループ
+- ID: 患者ID
+```{r}
+## Classical example: Student's sleep data
+plot(extra ~ group, data = sleep)
+t.test(extra ~ group, data = sleep)
+```
+
+```{r}
+t.test(extra ~ group, data = sleep, paired = TRUE)
+```
+
+`paired`をTRUEとすると、Paired T-testを行い、設定しない場合はWelch Two Sample t-testを行う。
+
+T検定は外れ値に弱く、元のデータの分布がいびつになると、正しくない結果につながりやすい
+
+## 3-3　独立性の検定（カイ二乗検定）：施策の効果があったかどうかを見る
+- `chisq.test()`: 独立性の検定　カイ二乗検定
+- `fisher.test()`：フィッシャーの正確確率検定
+```{r}
+x <- matrix(c(1625, 5, 1022, 11), ncol = 2)
+chisq.test(x)
+```
+```{r}
+fisher.test(x)
+```
+
+
+## 3-4　順位和検定：分布同士の「ずれ」を見る
+データがどのように分布していても使える仮説検定
+個々のデータのサンプル内での順位に注目した検定であり、
+一般的な順位データのばらつきは元データとは無関係に似たような分布になるという性質を利用
+
+ただ、t検定が使える場面では、順位和検定よりも、T検定の方がすぐれている
+- wilcoxon検定 / Mann-Whitney検定
+
+```{r}
+
+x <- c(1.83,  0.50,  1.62,  2.48, 1.68, 1.88, 1.55, 3.06, 1.30)
+y <- c(0.878, 0.647, 0.598, 2.05, 1.06, 1.29, 1.06, 3.14, 1.29)
+wilcox.test(x, y, paired = TRUE, alternative = "greater")
+
+```
+

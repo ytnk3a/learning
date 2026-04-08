@@ -1,0 +1,169 @@
+---
+title: "Ch.12 非線形回帰分析"
+output: html_document
+date: "2023-12-29"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 非線形回帰分析とは
+
+# ロジスティック回帰とは
+```{r}
+fyear <- 1966:1984
+fyear_num <- 1:length(fyear)
+
+penetraion <- c(
+  0.003, 0.016, 0.054, 0.139, 0.263, 0.423, 0.611, 0.758, 0.859, 0.903, 
+  0.937, 0.954, 0.978, 0.978, 0.982, 0.985, 0.989, 0.988, 0.992
+)
+
+
+fm <- nls(
+  penetraion ~ a / (1 + b * exp(c * fyear_num)),
+  start = c(a = 1, b = 1, c = -1),
+  trace = TRUE
+)
+```
+```{r}
+summary(fm)
+```
+
+```{r}
+plot(fyear, penetraion, cex = 2)
+lines(fyear, penetraion)
+lines(fyear, fitted(fm), col = 2, lty = 2, lwd = 2)
+legend(1975, 0.45, c("obs", "pred"), col = 1:2, lty = 1:2, lwd = 1:2)
+```
+また、`nls` には用意された関数式を呼び出して、回帰分析を行うことができるため、
+関数の具体的な式を記述する必要がなく、
+関数名を引数として用いればよい
+```{r}
+fm1 <- nls(penetraion ~ SSlogis(fyear, Asym = Asym, xmid = xmid, scal = scal))
+
+summary(fm1)
+```
+```{r}
+plot(fyear, penetraion, cex = 2)
+lines(fyear, penetraion)
+lines(fyear, fitted(fm), col = 2, lty = 2, lwd = 2)
+lines(fyear, fitted(fm1), col = 3, lty = 3, lwd = 3)
+legend(1975, 0.45, c("obs", "pred_man", "pred_SSlogis"), col = 1:3, lty = 1:3, lwd = 1:3)
+```
+用意されている関数式は
+- 多項式関数: poly
+- ロジスティック関数: SSogis
+- ワイブル関数: SSweibull
+- 勾配曲線: SSfol
+
+## 多項式回帰
+```{r}
+set.seed(123)
+x <- seq(-5, 5, 0.1)
+y_poly_ex <- 10 * x^3 + 100 * rnorm(x, 0, 1)
+plot(x, y_poly_ex)
+```
+
+```{r}
+fm3 <- nls(y_poly_ex ~ a + b * x + c * x^2 + d * x^3, start = c(a = 1, b = 1, c = 1, d = 1), trace = TRUE)
+summary(fm3)
+```
+
+```{r}
+fm4 <- nls(y_poly_ex ~ d * x^3, start = c(d = 1), trace = TRUE)
+summary(fm4)
+
+AIC(fm3)
+AIC(fm4)
+```
+```{r}
+plot(x, y_poly_ex)
+lines(x, fitted(fm3), lty = 1, col = 2)
+lines(x, fitted(fm4), lty = 2, col = 4, lwd = 2)
+legend(0, -750, c("一般式", "簡易式"), lty = 1:2, col = c(2, 4), lwd = 2, cex = 1.5)
+```
+
+# 平滑化回帰と加法モデル
+```{r}
+x1 <- seq(-10, 10, 0.1)
+set.seed(10)
+
+y1 <- 50 * sin(x1) + x1^2 + 10 * rnorm(length(x1), 0, 1)
+
+plot(x1, y1)
+```
+```{r}
+lm_p2 <- fitted(lm(y1 ~ poly(x1, 2)))
+lm_p5 <- fitted(lm(y1 ~ poly(x1, 5)))
+lm_p8 <- fitted(lm(y1 ~ poly(x1, 8)))
+
+plot(x1, y1)
+lines(x1, lm_p2, lty = 4, col = 4, lwd = 2)
+lines(x1, lm_p5, lty = 4, col = 2, lwd = 2)
+lines(x1, lm_p8, lty = 4, lwd = 2)
+legend(
+  -2.5, 130,
+  c("poly(x1, 2)", "poly(x1, 5)", "poly(x1, 8)"),
+  col = c(4, 2, 1),
+  lty = c(4, 2, 1),
+  lwd = 2
+)
+```
+```{r}
+op <- par(mfrow = c(2, 2), oma = c(2, 2, 2, 2), mar = c(2, 2, 2, 2))
+plot(x1, y1, main = "関数smooth.splineによる平滑結果")
+lines(smooth.spline(x1, y1), col = 2, lwd = 2)
+
+plot(x1, y1, main = "関数ksmoothによる平滑結果")
+lines(ksmooth(x1, y1), col = 4, lwd = 2)
+
+plot(x1, y1, main = "関数supsmuによる平滑結果")
+lines(supsmu(x1, y1), col = 6, lwd = 2)
+
+plot(x1, y1, main = "関数lowessによる平滑結果")
+lines(lowess(x1, y1, f = 0.1), col = 8, lwd = 2)
+par(op)
+```
+
+- Kernel Regression Smoother: ksmooth
+  核関数を用いた回帰平滑化
+
+- Friedman's SuperSmoother: supsmu
+
+- Locally-weighted Polynomial Regression: lowess
+
+- Local Polynomial Regression Fitting: loess
+
+- 移動中央値平滑化: runmed()
+  奇数スパンの移動中央値を計算。考えられる限り最も頑健な散布図平滑化    
+
+- Tukeyの移動中央値平滑化: smooth()
+- 移動中央値に対する端点平滑化: smoothEnds()  
+
+
+# 加法モデル
+```{r}
+library(mgcv)
+
+set.seed(2) ## simulate some data... 
+dat <- gamSim(1,n=400,dist="normal",scale=2)
+b <- gam(y~s(x0)+s(x1)+s(x2)+s(x3),data=dat)
+summary(b)
+```
+
+# 各モデル
+
+- 局所回帰モデル / local regression model
+  - stats::loess
+- ロバスト回帰モデル
+- 射影追跡回帰モデル
+  - MASS::ppr
+- MARS / Multivariate Adaptive Regression Spline
+-
+
+他) https://www.msi.co.jp/solution/splus/materials/splus.pdf より
+- 交替条件付き期待値による回帰（ACE）
+- 加法型分散安定化変換による回帰（AVAS）
+- 残差2乗中央値回帰

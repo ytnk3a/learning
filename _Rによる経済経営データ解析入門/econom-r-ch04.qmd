@@ -1,0 +1,70 @@
+---
+title: "econm-r-ch04"
+format: html
+---
+
+```{r}
+library(Benchmarking)
+```
+
+```{r}
+n <- 40
+
+logK <- 3 + rnorm(n, 0, 1)
+logL <- 2 + rnorm(n, 0, 1)
+
+logy <- 1.5 + 0.7 * logK + 0.3 * logL + rnorm(n, 0, 1)
+
+res_lm <- lm(logy ~ logK + logL)
+summary(res_lm)
+```
+
+```{r}
+data("milkProd")
+head(milkProd)
+```
+
+```{r}
+pairs(milkProd[, -1])
+```
+
+```{r}
+x <- with(milkProd, cbind(vet, energy, cows))
+y <- matrix(milkProd$milk)
+
+milk_sfa <- sfa(log(x), log(y))
+summary(milk_sfa)
+```
+
+
+```{r}
+fit_lm <- lm(log(y) ~ log(x))
+cbind(
+  ols = coef(fit_lm),
+  sfa = coef(milk_sfa)
+)
+```
+
+```{r}
+cbind(
+  eff  = eff(milk_sfa),
+  te   = te.sfa(milk_sfa),
+  teBC = teBC.sfa(milk_sfa),
+  teM  = teMode.sfa(milk_sfa),
+  teJ  = teJ.sfa(milk_sfa)
+)[1:10, ]
+```
+
+- teJの効率値の計算
+```{r}
+e <- residuals(milk_sfa)
+s2 <- sigma2.sfa(milk_sfa)
+
+lambda <- lambda.sfa(milk_sfa)
+mu_star <- -e * lambda^2 / (1+lambda^2)
+ss_star <- lambda / (1+lambda^2) * sqrt(s2)
+
+te_j <- exp(-mu_star - ss_star * (dnorm(mu_star / ss_star) / pnorm(mu_star / ss_star)))
+plot(te_j, type = "b")
+
+```

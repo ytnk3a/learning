@@ -1,0 +1,214 @@
+---
+title: "Ch.5 主成分分析"
+output: html_document
+date: "2023-07-12"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 5．主成分分析
+```{r}
+library(psych)
+library(FactoMineR)
+```
+
+主成分得点を求める際に [^1]
+
+- 主成分得点の不変分散が固有値に一致するように計算されるのが、`prcomp()`
+- 主成分得点の標本分散が固有値に一致するように計算されるのが、`princomp()`
+
+[^1]: Rのprcomp()関数で主成分分析をするときの注意点
+  https://blog.statsbeginner.net/entry/2014/07/27/121214
+
+
+- Rモードの場合しか`princomp()`は使えない -> スペクトル分解 / 固有値分解を使うため
+- Rモード / Qモードの場合で `procomp()`は使える -> 特異値分解を使うため
+
+
+下記のブログは`princomp()`スペクトル分解としている
+【R言語】主成分分析　変数の寄与率の計算や次元の削減
+https://multivariate-statistics.com/2022/07/27/r-programming-principal-component-analysis/
+  
+下記のブログは`princomp()`固有値分解としている
+Rで主成分分析 - Qiita
+https://qiita.com/honda28/items/ca23cfd8c5c3ee182989#:~:text=%E3%81%93%E3%81%AE%E9%81%95%E3%81%84%E3%81%AFprincomp%E9%96%A2%E6%95%B0,%E9%96%A2%E6%95%B0%E3%82%92%E4%BD%BF%E3%81%88%E3%81%B0%E3%82%88%E3%81%84%E3%80%82
+
+Rモード :: 変数の複雑さを軽減する（変数から特徴量を抽出する） 
+変数の複雑さを軽減した構造を見つけたいという普通の変数の解析の場合はRモード
+
+Qモード :: サンプルの複雑さを軽減する（データ行列Xの転置行列に）
+
+- [統計解析でよく使われる言葉「Qモード」「Rモード」とは何を指すのか - ほくそ笑む](https://hoxo-m.hatenablog.com/entry/20120423/p1#f-f83585bb)
+
+レイモンドキャッテルが提唱
+
+
+変数をデフォルトで
+- 標準化するのは`FactoMinrR::PCA()`
+- 標準化しないのは`stats::prcomp()`
+
+主成分分析において、標準化しなくてもいいケースはほとんどない
+尺度が同じで等分散でなければならないためである。相関係数
+
+## 各関数の比較:実行コマンド
+
+```{r}
+res_princomp <- princomp(USArrests, cor = TRUE)
+res_prcomp <- prcomp(USArrests, center = TRUE, scale. = TRUE)
+res_principal <- principal(USArrests, nfactors = 4)
+res_pca <- PCA(USArrests, graph = FALSE)
+
+cat("\nresult --- princomp() ------------------ \n")
+summary(res_princomp)
+
+cat("\nresult --- prcomp() ------------------ \n")
+summary(res_prcomp)
+
+cat("\nresult --- principal() --------------- \n")
+summary(res_principal)
+
+cat("\nresult --- PCA() --------------------- \n")
+summary(res_pca)
+```
+## 各関数の比較:主成分負荷量
+
+```{r}
+cat("\nresult --- princomp() ------------------ \n")
+res_princomp$loadings
+
+cat("\nresult --- prcomp() ------------------ \n")
+res_prcomp$rotation
+
+cat("\nresult --- PCA() --------------------- \n")
+res_pca$svd$V
+```
+
+## 各関数の比較:主成分得点
+
+```{r}
+cat("\nresult --- princomp() ------------------ \n")
+head(res_princomp$scores)
+
+cat("\nresult --- prcomp() ------------------ \n")
+head(res_prcomp$x)
+
+cat("\nresult --- PCA() --------------------- \n")
+head(res_pca$ind$coord)
+```
+## 各関数の比較:バイプロット
+```{r}
+biplot(res_princomp)
+biplot(res_prcomp)
+plot(res_pca)
+```
+
+
+## stats::princomp() v.s. stats::prcomp()
+### 主成得点に対しての比較
+```{r}
+all.equal(
+  abs(res_princomp$scores), 
+  abs(res_prcomp$x), 
+  check.attributes = FALSE
+  )
+
+```
+
+### 主成分負荷量に対しての比較
+```{r}
+
+prin_load <- matrix(res_princomp$loadings, ncol = 4, byrow = FALSE)
+all.equal(
+  abs(prin_load), 
+  abs(res_prcomp$rotation), 
+  check.attributes = FALSE
+  )
+
+```
+
+## svd() v.s. stats::prcomp()
+
+主成分得点に関しては、svd()で出した結果と一致
+```{r}
+arrest_scl <- scale(USArrests, center = TRUE, scale = TRUE)
+arrest_svd <- svd(arrest_scl)
+svd_scores <- arrest_scl %*% arrest_svd$v
+
+all.equal(
+  res_prcomp$x,
+  svd_scores,
+  check.attributes = FALSE
+  )
+
+```
+主成分負荷量に関しては、svd()で出した結果と一致
+```{r}
+all.equal(
+  res_prcomp$rotation,
+  arrest_svd$v,
+  check.attributes = FALSE
+  )
+```
+
+## eigen() v.s. stats::princomp()
+主成分得点に関しては、eigen()で出した結果とすこしズレる
+```{r}
+arrest_cor <- cor(USArrests)
+arrest_eig <- eigen(arrest_cor)
+
+eig_scores <- arrest_scl %*% arrest_eig$vectors
+all.equal(abs(eig_scores), abs(res_princomp$scores), check.attributes = FALSE)
+```
+
+主成分負荷量に関しては、eigen()で出した結果と一致
+```{r}
+all.equal(abs(arrest_eig$vectors), abs(prin_load), check.attributes = FALSE)
+```
+
+
+## procomp() v.s. PCA()
+```{r}
+
+```
+
+## stats::princomp()
+
+分散共分散行列を使って計算されるため、`cor = TRUE`とすべき
+
+- fix_sign = FALSE
+  計算される第一主成分の負荷量の符号をprcompで計算されるものと同じにするため
+  
+
+```{r}
+# res_pca <- princomp(cor(USArrests), cor = TRUE)
+res_princomp <- princomp(USArrests, cor = TRUE)
+summary(res_princomp)
+res_princomp$loadings # or loadings(res_princomp)
+print(res_princomp, digits = 2, sort = FALSE)
+print(res_princomp, digits = 2, sort = TRUE)
+```
+
+## 
+データを標準化しないで分析を行うため、`scale. = TRUE`を行って分析を行う
+
+```{r}
+res_prcomp <- prcomp(USArrests, scale. = TRUE)
+summary(res_prcomp)
+```
+
+中心化はしても結果は変わらない
+```{r}
+res_prcomp <- prcomp(USArrests, center = TRUE, scale. = TRUE)
+summary(res_prcomp)
+# res_prcomp$rotation
+```
+
+
+## FactoMineR::PCA()
+
+```{r}
+
+```
+

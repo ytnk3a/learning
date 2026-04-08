@@ -1,0 +1,297 @@
+---
+title: "Ch.6 因子分析"
+output: html_document
+date: "2023-07-11"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+```
+
+
+# 因子分析とは
+
+- 1904年にスピアーマンによって提案
+
+- 因子分析と主成分分析の違いに関して
+  - 因子分析：変数間の相関関係から共通因子を求めることで、
+    多くの変数を共通因子にまとめて説明することを目的
+  - 主成分分析：無相関の合成変数を求めることで、少ない変数に縮約することを目的とする
+  
+  
+# 因子分析の基礎
+観測データに関しては、お互いに関連性を持っており、
+共通因子と独自因子に分けられるということを前提としている
+
+- 共通因子: common factor
+- 独自因子: unique factor
+
+そのため、下記のようなモデル式になる
+
+観測データ = 因子負荷量 x 因子得点 + 独自因子
+
+因子得点：その個体の共通因子のスコア
+因子負荷量：共通因子の係数
+
+数式で書くと
+
+$$
+x_{i1} = a_{11} f_{i1} + a_{12}f_{i2} + u_{i1}
+x_{i2} = a_{21} f_{i1} + a_{22}f_{i2} + u_{i2}
+
+$$
+と表される
+また、行列形式で書くと
+
+$$
+x = Af+u
+$$
+A: 因子負荷行列
+u: 独自因子の列ベクトル
+f: 因子得点の列ベクトル
+
+一定の条件のもとこのモデルでは、母共分散行列 $\Sigma$ に対しては下記の数式が成り立つ
+
+$$
+\Sigma = A A^t + \psi
+$$
+
+$\psi$ は独自因子の分散を主対角の要素とした行列である
+
+母共分散行列 $\Sigma$ は標本の共分散行列 $S$ を用いて推定することから、
+因子分析は結局のところデータの共分散行列 $S$ から $A$ と $\psi$ を求める問題へと帰着する
+
+独自因子がない場合は $\psi$ を推定する必要がないため、
+主成分分析と等しくなる
+
+改めてであるが、主成分分析の数式は
+
+主成分得点 = 観測データ x 主成分係数
+
+$$
+Z = X A
+$$
+
+となる
+
+about rotation: 
+There is still some indeterminacy in the model for it is unchanged if \LambdaΛ is replaced by G \LambdaGΛ for any orthogonal matrix GG. Such matrices GG are known as rotations (although the term is applied also to non-orthogonal invertible matrices).
+
+from help
+
+# ケーススタディ
+
+```{r}
+library(psych)
+```
+```{r}
+Thurstone
+```
+Thurstone: 9 x 9 correlation matrix of ability tests, N = 213
+
+```{r}
+bfi_cal <- na.omit(bfi[, 1:25])
+# bfi_cal[is.na(bfi_cal)] <- 0
+
+# print(paste0("bfi is ", nrow(bfi), "ss -> na.omit(bfi) is ", nrow(bfi_cal), "ss"))
+cat(paste0("bfi is ", nrow(bfi), "ss -> na.omit(bfi) is ", nrow(bfi_cal), "ss"))
+
+```
+
+## + 因子数の決定
+```{r}
+fa.parallel(bfi_cal, error.bars = FALSE)
+fa.parallel(bfi_cal, error.bars = TRUE)
+```
+
+## factanal()関数の使い方
+```{r}
+res_fac <- factanal(bfi_cal, factors = 6)
+res_fac
+```
+```{r}
+summary(res_fac)
+```
+- 推定方法は
+  - maximum-likelihood
+
+- scores:
+  - none:
+  - regression:
+  - Bartlett:
+  
+- rotation:
+  - none
+  orthogonal rotations.
+  - varimax
+  oblique rotation
+  - promax
+
+### factanal()の結果を返す方法
+```{r}
+head(res_fac$scores)
+
+res_fac$loadings
+
+as.data.frame(unclass(res_fac$loadings)) %>% 
+  rownames_to_column("names")
+```
+
+```{r}
+barplot(res_fac$loadings[, 1], col = "lightblue")
+barplot(res_fac$loadings[, 2], col = "lightblue")
+```
+
+```{r}
+res_fac_none <- factanal(bfi_cal, factors = 6, rotation = "none", scores = "regression")
+res_fac_vari <- factanal(bfi_cal, factors = 6, rotation = "varimax", scores = "regression")
+```
+
+```{r}
+biplot(res_fac_none$scores, res_fac_none$loadings)
+biplot(res_fac_vari$scores, res_fac_vari$loadings)
+```
+
+### モデルの信頼性に関して
+```{r}
+res_fac
+```
+`Test of the hypothesis that 6 factors are sufficient.`
+因子の数をいくつかにするかが1つの問題だが、上記の結果に注目し、
+現在のデータセットに対して、カイ二乗検定の結果が十分な因子数かどうかを見る必要がある
+
+```{r}
+res_fac$STATISTIC # カイ二乗値 
+res_fac$PVAL      # カイ二乗統計量のP値
+```
+
+## fa()関数の使い方
+
+```{r}
+res_fa <- fa(bfi_cal, nfac = 5, rotate = "varimax", fm = "ml")
+res_fa
+```
+
+- fm:
+  - minres: 最小二乗法
+  - wls: 加重最小二乗法
+  - gls: 一般化加重最小二乗法
+  - pa: 主因子法
+  - ml: 最尤法
+  - minchi: サンプルサイズ加重カイ二乗最小法
+
+- scores:
+  - regression:
+  - Thurstone:
+  - tenBerge:
+  - Anderson:
+  - Bartlett:
+  - Harman:
+  - components:
+
+- rotate:
+  - none
+  orthogonal rotations.
+  - varimax
+  - quartimax
+  - bentlerT
+  - equamax
+  - varimin
+  - geominT
+  - bifactor
+  oblique rotation
+  - Promax
+  - promax
+  - oblimin
+  - simplimax
+  - bentlerQ
+  - geominQ
+  - biquartimin
+  - cluster
+  
+  
+
+### fa()の結果を返す方法
+```{r}
+head(res_fa$scores)
+
+res_fa$loadings
+
+as.data.frame(unclass(res_fa$loadings)) %>% 
+  rownames_to_column("names")
+```
+```{r}
+res_fa$loadings[, 1:4]
+```
+
+### fa()の結果を整理する方法
+-  fa.sort sorts the loadings for each factor. 
+   Items are located in terms of their greatest loading
+-  fa.organize allows for the columns or rows to be reorganized.
+```{r}
+seiseki <- matrix(c(
+  89, 90, 67, 46, 50, 57, 70, 80, 85, 90,
+  80, 90, 35, 40, 50, 40, 60, 50, 45, 55,
+  78, 85, 45, 55, 60, 55, 65, 80, 75, 85,
+  90, 85, 88, 92, 95), 
+  nrow = 7, ncol = 5,
+  byrow = TRUE)
+
+colnames(seiseki) <- c("math", "science", "japanese", "english", "society")
+rownames(seiseki) <- c("A", "B", "C", "D", "E", "F", "G")
+
+res_fac_seiseki <- factanal(seiseki, factors = 2, rotation = "varimax", scores = "regression")
+res_fac_seiseki
+
+res_fa_seiseki <- fa(seiseki, nfac = 2, rotate = "varimax", fm = "ml")
+res_fa_seiseki
+fa.sort(res_fa_seiseki)
+fa.organize(res_fa_seiseki)
+```
+
+## 各因子分析の結果比較
+
+```{r}
+Thurstone.33 <- as.matrix(Thurstone.33)
+mle2 <- fa(Thurstone.33,2,rotate="none",fm="mle")
+mle3 <- fa(Thurstone.33,3 ,rotate="none",fm="mle")
+pa2 <- fa(Thurstone.33,2,rotate="none",fm="pa")
+pa3 <- fa(Thurstone.33,3,rotate="none",fm="pa")
+mr2 <- fa(Thurstone.33,2,rotate="none")
+mr3 <- fa(Thurstone.33,3,rotate="none")
+factor.congruence(list(mle2,mr2,pa2, mle3,pa3,mr3))
+```
+```{r}
+factor.congruence(list(mle2,mr2,pa2))
+factor.congruence(list(mle3,pa3,mr3))
+```
+```{r}
+wls <- fa(Harman74.cor$cov,4,rotate="none",fm="wls")
+pa <- fa(Harman74.cor$cov,4,rotate="none",fm="pa")
+minres <-  factanal(factors=4,covmat=Harman74.cor$cov,rotation="none")
+mle <- fa(Harman74.cor$cov,4,rotate="none",fm="mle")
+uls <- fa(Harman74.cor$cov,4,rotate="none",fm="uls")
+factor.congruence(list(minres,mle,pa,wls,uls))
+```
+
+## fa.poly()を使ったカテゴリカルデータに対する因子分析
+```{r}
+res_fa_poly <- fa.poly(bfi_cal, nfac = 5, rotate = "varimax", fm = "ml")
+res_fa_poly
+```
+
+
+
+
+
+
+
+
+
+[^1]
+
+[^1]: 注釈1
+
+
